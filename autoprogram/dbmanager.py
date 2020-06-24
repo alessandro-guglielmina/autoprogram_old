@@ -1,28 +1,35 @@
 from pathlib import Path
-
 import sqlite3
 import numpy as np
 import pandas as pd
 
-class db(object):
+
+class Db(object):
 
 	def __init__(self, path):
+		self.path = path
 
-		self.conn = sqlite3.connect(path)
+	# Context manager
+	def __enter__(self):
+		self.conn = sqlite3.connect(self.path)
 		self.curs = self.conn.cursor()
-		#self.comm = self.conn.commit()
+		return self
 
-	# Close the database object
-	def db_cls(self):
-
+	def __exit__(self, exc_class, exc, traceback):
+		self.conn.commit()
 		self.conn.close()
 
-	# Get the row ids corresponding to 
-	def db_get_row_ids(self, table, id_col, id_): #(self, table',  'id_col', 'id')
+	# Get the row ids corresponding to the id
+	def get_rowids(self, table, id_col, id_): # (self, 'table',  'id_col', 'id')
 
 		qry = f"SELECT rowid FROM {table} WHERE {id_col} = ?"
-		qry_val = [id_]
-		res = [i[0] for i in self.curs.execute(qry, qry_val).fetchall()]
+		qry_arg = (id_,)
+		self.curs.execute(qry, qry_arg)
+		"""
+		fetchall returns [(r1c1, r1c2, ...), (r2c1, r2c2, ...), ...], where the tuples are the rows of the returned set of values
+		"""
+		qry_vals = self.curs.fetchall()
+		res = [i[0] for i in qry_vals]
 
 		return res # [rowid1, rowid2, ...]
 
@@ -77,35 +84,7 @@ class db(object):
 		return res # val / array([val1, val2, ...])
 
 
-	# # db_get_values auxiliary function	    	
-	# def db_get_value_double_id_col(self, table, id_col1, id_col2, val_col, id1, id2): #(self, 'table', 'id1_col', 'id2_col', 'val_col', 'id1', 'id2')
-
-	# 	row_ids = self.db_get_row_ids_double_id_cols(table, id_col1, id_col2, id1, id2) # [rowid1, rowid2, ...]
-		
-	# 	res = np.array([]) # it can be str or NoneType
-
-	# 	for i in row_ids:
-
-	# 		qry = f'SELECT {val_col} FROM {table} WHERE rowid = ?'
-	# 		qry_val = [i]
-	# 		val = self.curs.execute(qry, qry_val).fetchall()[0][0]# from [(val,)] to val T.B.N. in case of no result the output is [(None,)]
-
-	# 		if val != None:
-
-	# 			val = np.asarray([val], dtype = str)
-
-	# 		else:
-
-	# 			val = np.asarray([val])
-
-	# 		res = np.append(res, val)
-
-	# 	# if the value is scalar parentheses are removed
-	# 	if res.size == 1:
-
-	# 		res = res[0]
-
-	# 	return res # val / array([val1, val2, ...])
+	
 
 
 	def db_update_values_single_id(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
@@ -226,7 +205,7 @@ class db(object):
 			self.conn.commit()
 
 
-class settings_db(db):
+class SettingsDb(Db):
 
 	def __init__(self, path):
 

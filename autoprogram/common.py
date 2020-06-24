@@ -14,7 +14,7 @@ from autoprogram import db_manager as dbm
 copyright_header = 'AutoProgram.\nCopyright \xa9 2020 Guglielmina Alessandro. All rights reserved.'
 
 # settings_path = Path('AutoProgram/settings.db')
-settings_path = Path('Autoprogram/settings.db')
+settings_path = Path('autoprogram/settings.db')
 settings = dbm.settings_db(settings_path)
 
 master_dir_path = Path('AutoProgram/master_programs')
