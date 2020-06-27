@@ -69,24 +69,22 @@ class InputValuesWorkBook(WorkBook):
 		act_sheet = self.wb['general_values']
 		try:
 			val_addr = act_sheet.val_addr[act_sheet.val_name.isin(val_names)].to_numpy()
-			val_addr[np.isnan(val_addr)] = None
+			val_addr[pd.isnull(val_addr)] = None # pd.isnull needed to address nan values
 			val_descr = act_sheet.val_descr[act_sheet.val_name.isin(val_names)].to_numpy()
-			val_descr[pd.isnull(val_descr)] = None
+			val_descr[pd.isnull(val_descr)] = None # pd.isnull needed to address nan values
 		except KeyError:
 			raise ValueError(f"Some values are missing from the 'general_values' sheet.")
 		# Sect-percs and vals are set to None
-		sect_percs = np.array([None for i in fam_val_names])
-		vals = np.array([None for i in fam_val_names])
+		sect_percs = np.array([None for i in val_names])
+		vals = np.array([None for i in val_names])
 		# Build the common data DataFrame
-		data = pd.DataFrame({	'val_name': pd.Series(val_names, dtype='str'),
+		res = pd.DataFrame({	'val_name': pd.Series(val_names, dtype='str'),
 			             		'rel': pd.Series(rels, dtype='str'),
 			             		'val_addr': pd.Series(val_addr, dtype='str'),
 			             		'val_descr': pd.Series(val_descr, dtype='str'),
 			             		'sect_perc': pd.Series(sect_percs, dtype='object'),
 			             		'val': pd.Series(vals, dtype='object')
 			             		})
-		print(data)
-		input('qui')
 		if not (common.Variables.diam_addr in res.val_addr.tolist() and common.Variables.flute_len_addr in res.val_addr.tolist()):
 			raise ValueError('Diameter or flute length value missing.')
 		return res # DataFrame('val_addr', 'val_type', 'val_descr')

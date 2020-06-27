@@ -2,13 +2,14 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-from autoprogram import common as common
+from autoprogram import config
+from autoprogram import common
 from autoprogram import dbmodule as dbm
 
 
 # Function allowing to choose the correct object depending on the file extension
 def prog_select(path):
-	if common.variables.file_suffix == common.variables.vgp_file_suffix:
+	if common.Variables.file_suffix == config.vgp_suffix:
 		res = VgpProg(path)
 		return res
 	else:
@@ -28,7 +29,7 @@ is_numeric = lambda x: any(list(map(is_float, x)))
 
 
 class Program(object):
-	# These variables and functions must be created for the ANCA program too (then remove vgp_)
+	# These Variables and functions must be created for the ANCA program too (then remove vgp_)
 	diam_name = 'diameter name not initialized'
 	flute_len_name = 'flute length name not initialized'
 
@@ -52,7 +53,7 @@ class Program(object):
 class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRAM" AS PARENT OBJECT. "PROGRAM" IS INHERITED BY ANCA_PROG TOO
 	
 	def __init__(self, path):
-		with dbm.Db(path) as self.db:
+		with dbm.DataBase(path) as self.db:
 			pass
 
 	Curve_table = 'Curve' 
@@ -75,8 +76,11 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 	# Get the Parameter id from the parameter name (and curve type, because more parameters have the same name, but only one parameter per curve type)
 	def get_param_id_from_addr(self, addr): # (self, row.addr)
 		addr = addr.split('-') # split the address in parameter type and parameter name
-		curve_type = addr[0]
-		param_name = addr[1]
+		try:
+			curve_type = addr[0]
+			param_name = addr[1]
+		except IndexError:
+			raise ValueError('Wrong Parameter address.')
 		# Get the possible curve ids from Curve table
 		poss_curve_ids = self.db.get_values(self.Curve_table, self.table_col.loc[self.Curve_table, 'curve_type_col'],\
 						 self.table_col.loc[self.Curve_table, 'curve_id_col'], curve_type) # [poss_cu_id1, poss_cu_id2, ...]
@@ -124,7 +128,7 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 
 
 	# Get id_col and val_col alongside table and id, obtained with the previous function (values that must not be averaged are skipped because of the previous function)
-	def vgp_get_qry_data_from_addr(self, addresses): #(self, ['val_addr1', 'val_addr2', ...])) T.B.N. addresses not belonging to tables 'Parameter', 'VGP_Value_Double' or 'VGP_Value_FunctionD' are automatically deleted
+	def get_qry_data_from_addr(self, addresses): #(self, ['val_addr1', 'val_addr2', ...])) T.B.N. addresses not belonging to tables 'Parameter', 'VGP_Value_Double' or 'VGP_Value_FunctionD' are automatically deleted
 		dtypes_n_ids = self.get_dtypes_n_ids(addresses)
 		columns = ['val_addr', 'table', 'id_col', 'sect_perc_col', 'val_col', 'id']
 		res = pd.DataFrame(columns = columns, dtype = str)
@@ -231,7 +235,7 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 		for addr, dtype, id_ in zip(addresses, dtypes, ids):
 			# Check if the values belong to one of the three types, if the address is not among the input values and if the value is actually used in the program
 			#T.B.N. not all the addresses in VGP_Data are actually used in the program!!!
-			if dtype in [self.Parameter_table, self.VGP_Value_Double_table, self.VGP_Value_FunctionD_table] and addr not in common.variables.data['val_addr'].tolist()\
+			if dtype in [self.Parameter_table, self.VGP_Value_Double_table, self.VGP_Value_FunctionD_table] and addr not in common.Variables.data['val_addr'].tolist()\
 			and id_ in self.db.db_get_whole_column(dtype, self.table_col.loc[dtype, 'id_col']): # T.B.N. not all the addresses in VGP_Data table are actually used in the program
 				#print({'val_addr' : addr, 'table' : dtype, 'id_col' : self.table_col.loc[dtype, 'id_col'], 'sect_perc_col' : self.table_col.loc[dtype, 'sect_perc_col'],\
 					  #'val_col' : self.table_col.loc[dtype, 'val_col'],'id' : id_})
@@ -244,18 +248,18 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 
 	def scale_values(self):
 		to_scale_qry_data = self.get_to_scale_qry_data()
-		up_prog = prog_select(common.variables.up_prog_filename)
-		low_prog = prog_select(common.variables.low_prog_filename)
+		up_prog = prog_select(common.Variables.up_prog_filename)
+		low_prog = prog_select(common.Variables.low_prog_filename)
 		up_to_scale_vals = up_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
 		low_to_scale_vals = low_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
 		# Data scaling
-		scaled_vals = up_to_scale_vals*(1 - ((common.variables.up_diam - common.variables.diam) / (common.variables.up_diam - common.variables.low_diam))) +\
-					  low_to_scale_vals*(1 - ((common.variables.diam - common.variables.low_diam) / (common.variables.up_diam - common.variables.low_diam)))
+		scaled_vals = up_to_scale_vals*(1 - ((common.Variables.up_diam - common.Variables.diam) / (common.Variables.up_diam - common.Variables.low_diam))) +\
+					  low_to_scale_vals*(1 - ((common.Variables.diam - common.Variables.low_diam) / (common.Variables.up_diam - common.Variables.low_diam)))
 		self.update_values_from_qry_data(to_scale_qry_data, scaled_vals)
 
 
 	def update_input_values(self):
-		input_vals_ind = np.logical_and(common.variables.data.val_addr.notnull(), common.variables.data.rel.isnull()) # input values that can be directly updated must have an address and no relations
-		addr_list = common.variables.data.val_addr[input_vals_ind].tolist() # address list
-		vals = common.variables.data.loc[input_vals_ind, 'sect_perc':'val'] # sect percs and vals DataFrame
+		input_vals_ind = np.logical_and(common.Variables.data.val_addr.notnull(), common.Variables.data.rel.isnull()) # input values that can be directly updated must have an address and no relations
+		addr_list = common.Variables.data.val_addr[input_vals_ind].tolist() # address list
+		vals = common.Variables.data.loc[input_vals_ind, 'sect_perc':'val'] # sect percs and vals DataFrame
 		self.update_values_from_addr(addr_list, vals)
