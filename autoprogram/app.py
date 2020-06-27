@@ -3,244 +3,208 @@ import glob
 import os
 import time
 from itertools import compress
-
 import sqlite3
 import numpy as np
 import pandas as pd
 import shutil
 
+from autoprogram import config
 from autoprogram import common
-from autoprogram import program_manager as pm
-
-
-
+from autoprogram import wbmodule as wbm
+from autoprogram import progmodule as pm
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 # This class is the blueprint for all the positions (i.e. all the program phases)
-class position(object):
+class Position(object):
 
+	prev_pos = None
+	current_pos = None
+	follow_pos = None
 
-	def __init__(self):
-
-		self.prev_pos = []
-		self.follow_pos = []
-
-
-	def activate(self):
-
-		print("This position is not yet configured.")
-		print("Subclass it and implement activate(self) method.")
+	@classmethod
+	def activate(cls):
+		print("The activate method isn't initialized in this is-a-position class.")
 		sys.exit(1)
 
-
+	@classmethod
 	# This function return the user inputs
-	def user_input(self, ch_list = [], ch_ids = [], cast = [], print_list = []): #(ch_list, ch_id, cast, print_list)
-		
-		# if there is a list of choices
-		if ch_list != [] and ch_ids != []:
-
+	def user_input(cls, ch_list = None, ch_ids = None, cast = None, print_list = None): #(ch_list, ch_id, cast, print_list)
+		# If there is a list of choices
+		if ch_list is not None and ch_ids is not None:
 			cast = str
 			bound_val = True
 			print_list = ''
-
 			for i, j in zip(ch_ids, ch_list):
-
 				print_list = print_list + f'Enter {i} for {j}\n'
-
 			print_list = [print_list]
-
 		# if there isn't
-		elif cast != [] and print_list != []:
-
+		elif cast is not None and print_list is not None:
 			bound_val = False
-			ch_list = []
-
 		else:
-
-			raise ValueError('Not enough input arguments.')
-
+			raise ValueError('Wrong arguments combination.')
 		inp_list = []
 		converted = False
-
 		for i in print_list:
-
 			os.system('clear')
-
 			while True:
-
 				try:
-
 					inp_i = cast(input(f'{i}\n> ')) # user input call
-				
 					if bound_val: # (so cast = str and ch_id must be given)
-
 						inp_i = inp_i.upper() # the choice must be capital to make the choice case insensitive
-
 						if inp_i in ch_ids:
-
 							bool_filt = [i == inp_i for i in ch_ids]
 							ch = list(compress(ch_list, bool_filt))[0] # use boolean indexing on a list
 							inp_i = ch # inp_val_i is reassigned with the choice corresponding to the chosen index
 							converted = True
-
 						else:
-
 							os.system('clear')
-							print("Input non among the possible choices.")
-
+							print("Input non among the possible choices.\n")
 					if converted or not bound_val:
-
 						os.system('clear')
 						inp_list.append(inp_i)
-						print("You have entered: " + str(inp_i))
-
+						print("You have entered: " + str(inp_i) + "\n")
 						break
-
 				except ValueError:
-
-					print("Wrong input type")
-
+					print("Wrong input type\n")
 		res = inp_list
-
 		return res # list([inp1, inp2, ...])
 
-
-	def select_position(self):
-
+	@classmethod
+	def select_position(cls):
 		ch_list = ['confirm', 'repeat', 'move back']
 		ch_ids = ['C', 'R', 'B']
-
-		ch = self.user_input(ch_list = ch_list, ch_ids = ch_ids)
+		ch = cls.user_input(ch_list = ch_list, ch_ids = ch_ids)
 		pos_select = ch[0]
-
-
 		if (pos_select == 'confirm'):
-
-			next_pos = self.follow_pos
-
+			next_pos = cls.follow_pos
 		elif (pos_select == 'repeat'):
-
-			next_pos = self.current_pos
-
+			next_pos = cls.current_pos
 		elif (pos_select == 'move back'):
-
-			next_pos = self.prev_pos
-
-		#os.system('cls' if os.name == 'nt' else 'clear')
-
+			next_pos = cls.prev_pos
 		return next_pos
 
-
-
-
 # This is the program phase in which the information carrier is initialized with the familiy name (provided by the user)
-class initialize(position):
+class Initialize(Position):
 
-	def __init__(self):
+	prev_pos = 'initialize'
+	current_pos = prev_pos
+	follow_pos = 'insert_parameters'
 
-		self.prev_pos = 'initialize'
-		self.current_pos = self.prev_pos
-		self.follow_pos = 'insert_parameters'
+	@classmethod
+	def activate(cls): #()
+		cls.insert_preliminary_data()
+		cls.get_fam_prog_data()
+		cls.get_tool_type()
+		cls.get_val_addr()
+		cls.get_common_data()
+		print(common.Variables.data.val_addr)
+		input('pausa')
+		return cls.select_position()
 
+	# Get the family names from the master programs directories
+	@classmethod
+	def get_fam_names(cls):
+		return [str(fam_dir.name) for fam_dir in config.master_progs_dir.iterdir() if fam_dir.is_dir()]
 
-	def activate(self): #()
- 
-		self.insert_family_name()
-		self.get_fam_prog_list()
-		self.get_file_suffix()
-		common.functions.get_tool_type()
-		self.get_common_data()
-		common.functions.get_variable_names()
+	# Get the family name from user
+	@classmethod
+	def insert_preliminary_data(cls):
+		# Acquire tool name
+		common.Variables.tool_name = input('Insert tool name:\n>')
+		# Create array containing all family names (string format)
+		fam_name_list = cls.get_fam_names() # ['fam1', 'fam2', ...]
+		# Create list containing family id (string format)
+		fam_name_ids = [str(i + 1) for i in list(range(len(fam_name_list)))]
+		# Acquire user input
+		print('Select family:\n')
+		common.Variables.fam_name = cls.user_input(ch_list = fam_name_list, ch_ids = fam_name_ids)[0] # 'ch_fam'
+		os.system('clear')
 
-		return self.select_position()
+	@classmethod
+	def get_fam_prog_data(cls):
 
+		fam_prog_dir = Path(config.master_progs_dir/common.Variables.fam_name)
+		common.Variables.fam_prog_list = list(fam_prog_dir.glob('**/*'))
+		common.Variables.file_suffix = common.Variables.fam_prog_list[0].suffix
 
-	# get the family name from user
-	def insert_family_name(self):
+	# Get the tool type from the family name (which must contain the tool type, e.g. 'drill', 'mill', ...)
+	@classmethod
+	def get_tool_type(cls):
+		if 'DRILL' in common.Variables.fam_name.upper():
+			common.Variables.tool_type = 'drill'
+		elif 'MILL' in common.Variables.fam_name.upper():
+			common.Variables.tool_type = 'mill'
+		elif 'REAMER' in variables.fam_name.upper():
+			common.Variables.tool_type = 'reamer'
+		else:
+			raise ValueError('No such a tool type.')
+		print("Tool type is: " + common.Variables.tool_type)
 
-		# create array containing family names (string format)
-		fam_name_list = common.settings.db_get_all_fam_names() # ['fam1', 'fam2', ...]
+	# Get the common data needed in the following steps
+	@classmethod
+	def get_common_data(cls):
+		common.Variables.data = common.Variables.input_values_wb.get_common_data(common.Variables.fam_name)
 
-		# create list containing family id (string format)
-		fam_name_n = len(fam_name_list)
-		fam_name_ids = [str(i + 1) for i in list(range(fam_name_n))]
-
-		# user input
-		print('Select family:')
-		ch_fam = self.user_input(ch_list = fam_name_list, ch_ids = fam_name_ids)[0] # 'ch_fam'
-		#ch_fam = 'CA-CS drill'
-		common.variables.fam_name = ch_fam
-
-
-	def get_fam_prog_list(self):
-
-		common.variables.fam_prog_dir = Path(common.master_dir_path / common.variables.fam_name)
-		common.variables.fam_prog_list = list(common.variables.fam_prog_dir.glob('**/*'))
-
-
-	def get_file_suffix(self):
-
-		fam_progs = list(common.variables.fam_prog_dir.glob('**/*'))
-		common.variables.file_suffix = fam_progs[0].suffix # '.vgp'/ '.tom'
-
-		print("File suffix is: " + common.variables.file_suffix)
-
-
-	def get_common_data(self):
-
-		common.variables.data = common.settings.db_get_fam_data(common.variables.fam_name)
+	# Initialize the names of some features, depending on the tool type
+	@classmethod
+	def get_val_addr(cls):
+		# Update diam and flute names depending on file suffix and tool type
+		if common.Variables.file_suffix == config.vgp_suffix:
+			if common.Variables.tool_type == 'drill':
+				common.Variables.diam_addr = config.drill_diam_addr
+				common.Variables.flute_len_addr = config.drill_flute_len_addr
+				# common.Variables.point_ang_addr = config.drill_point_ang_addr
+				# common.Variables.first_spg_addr = config.drill_first_spg_addr
+				# common.Variables.meas_dist_addr = config.drill_meas_dist_addr
+			elif common.Variables.tool_type == 'mill':
+				pass
+			else:
+				raise ValueError('No such a tool type.')
+		else:
+			raise ValueError('No such a file suffix.')
 
 
 # This is the program phase in which the user defines the geometrical parameter of the tool
-class insert_parameters(position):
+class InsertParameters(Position):
 
-	def __init__(self):
+	prev_pos = 'initialize'
+	current_pos = 'insert_parameters'
+	follow_pos = 'create_program'
 
-		self.prev_pos = 'initialize'
-		self.current_pos = 'insert_parameters'
-		self.follow_pos = 'create_program'
-
-
-	def activate(self): #()
-
-		self.insert_parameter_values()
-		self.update_diam_flute_len()
-
-		return self.select_position()
-
+	@classmethod
+	def activate(cls):
+		cls.insert_parameter_values()
+		cls.update_diam_flute_len()
+		return cls.select_position()
 
 	# Write user inputs in the value column
-	def insert_parameter_values(self):
-
-		# Creation of the printing list
-		all_rel = common.variables.data.rel.tolist()
-		all_descr = common.variables.data.descr.tolist()
+	@classmethod
+	def insert_parameter_values(cls):
+		# Create printing list
+		all_rel = common.Variables.data.rel.tolist()
+		all_descr = common.Variables.data.val_descr.tolist()
 		inp_vals_filt = [i == None for i in all_rel]
 		descr_list = list(compress(all_descr, inp_vals_filt)) # use boolean indexing with lists
 		print_list = [f'Enter {i}: ' for i in descr_list]
+		# Get user input
+		print('Insert parameters:\n')
+		inp_vals = cls.user_input(cast = float, print_list = print_list)
+		# Input values have no relation, this feature is used to refence them in common data
+		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = inp_vals # isnull() needed to reference None values
 
-		# get user input
-		print('Insert parameters:')
-		inp_vals = self.user_input(cast = float, print_list = print_list)
-		#inp_vals = [1.666, 2, 2, 2, 2, 2, 2, 2, 2, 2]
-		common.variables.data.loc[common.variables.data.rel.isnull(), 'val'] = inp_vals # isnull() needed to reference None values
-
-
-	# Insert diameter and flute length values (after user inputs)
-	def update_diam_flute_len(self):
-
-		#common.variables.diam = common.variables.v[common.variables.nrda[:, 0] == common.variables.diam_name][0, 0]
-		common.variables.diam = common.variables.data.loc[common.variables.data.val_addr == common.variables.diam_addr, 'val'].values[0] # dereference all values with .values as ndarray and then with [0]
-
-		common.variables.flute_len = common.variables.data.loc[common.variables.data.val_addr == common.variables.flute_len_addr, 'val'].values[0]
+	# Record diameter and flute length values in common data (after user inputs)
+	@classmethod
+	def update_diam_flute_len(cls):
+		common.Variables.diam = common.Variables.data.loc[common.Variables.data.val_addr == common.Variables.diam_addr, 'val'].values[0] # dereference all values with .values as ndarray and then with [0]
+		common.Variables.flute_len = common.Variables.data.loc[common.Variables.data.val_addr == common.Variables.flute_len_addr, 'val'].values[0]
 
 
 
 
 
 # This is the program phase in which the user defines the geometrical parameter of the tool
-class create_program(position):
+class CreateProgram(Position):
 
 	def __init__(self):
 
@@ -374,7 +338,7 @@ class create_program(position):
 
 
 # End phase
-class end(position):
+class End(Position):
 
 	def activate(self):
 
@@ -387,47 +351,28 @@ class end(position):
 
 
 # This class contain the information carrier, the positions
-class machine(object):
+class Machine(object):
 
-	def __init__(self):
+	first_position_name = 'initialize'
+	last_position_name = 'end'
+	position = {
+				  'initialize': Initialize(),
+				  'insert_parameters': InsertParameters(),
+				  'create_program': CreateProgram(),
+				  'end': End()
+				}
 
-		self.first_position_name = 'initialize'
-		self.last_position_name = 'end'
-		self.position = {
-						  'initialize': initialize(),
-						  'insert_parameters': insert_parameters(),
-						  'create_program': create_program(),
-						  'end': end()
-						 }
+	@classmethod
+	def go_to_position(cls, next_position_name):
+		return cls.position.get(next_position_name)
 
-
-	def go_to_position(self, next_position_name): #(machine(), str)
-
-		res = self.position.get(next_position_name)
-
-		return res # "is-a position" class
-
-
-	def run(self):
-
-		print(common.copyright_header)
-
-		while True:
-
-			try:
-
-				current_position = self.go_to_position(self.first_position_name) # start position
-
-				while current_position != self.go_to_position(self.last_position_name):
-					
-					next_position_name = current_position.activate() # return position name chosen in the position, and acquire user input while running (if any)
-					current_position = self.go_to_position(next_position_name) # current_position object belongs to an "is-a position" class
-
-				# be sure to print out the last scene
-				current_position.activate()
-
-				break
-
-			except ValueError as val_err:
-
-				print(val_err) # in case of value error, print the error and go to the first position (initialize)
+	@classmethod
+	def run(cls):
+		print(config.copyright_header)
+		current_position = cls.go_to_position(cls.first_position_name) # start position
+		while current_position != cls.go_to_position(cls.last_position_name):
+			next_position_name = current_position.activate() # return position name chosen in the position, and acquire user input while running (if any)
+			current_position = cls.go_to_position(next_position_name) # current_position object belongs to an "is-a position" class
+		# Be sure to print out the last scene
+		current_position.activate()
+			

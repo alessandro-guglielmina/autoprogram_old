@@ -1,6 +1,5 @@
-from autoprogram import apparatus as app
+from autoprogram import app
 
 if __name__ == '__main__':
 	
-	prog = app.machine()
-	prog.run()
+	app.Machine().run()

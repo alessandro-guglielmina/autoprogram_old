@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-class Db(object):
+class DataBase(object):
 
 	def __init__(self, path):
 		self.path = path
@@ -19,110 +19,56 @@ class Db(object):
 		self.conn.commit()
 		self.conn.close()
 
-	# Get the row ids corresponding to the id
+	# Get the row ids list corresponding to the input id
 	def get_rowids(self, table, id_col, id_): # (self, 'table',  'id_col', 'id')
-
 		qry = f"SELECT rowid FROM {table} WHERE {id_col} = ?"
 		qry_arg = (id_,)
 		self.curs.execute(qry, qry_arg)
 		"""
-		fetchall returns [(r1c1, r1c2, ...), (r2c1, r2c2, ...), ...], where the tuples are the rows of the returned set of values
+		fetchall returns [(r1c1, r1c2, ...), (r2c1, r2c2, ...), ...], where the tuples
+		are the rows of the returned set of values in the database
 		"""
 		qry_vals = self.curs.fetchall()
+		if not qry_vals:
+			raise ValueError(f"The query hasn't returned any value in the database {self.path}, in the table {table}, with the id {id_}.")
+		else:
+			pass
 		res = [i[0] for i in qry_vals]
-
 		return res # [rowid1, rowid2, ...]
 
 
-	# Get the row ids corresponding to 
-	def db_get_row_ids_double_id_cols(self, table, id_col1, id_col2, id1, id2): #(self, table', 'id_col1', 'id_col2', 'id1', 'id2')
+	# # Get the row ids corresponding to 
+	# def db_get_row_ids_double_id_cols(self, table, id_col1, id_col2, id1, id2): #(self, table', 'id_col1', 'id_col2', 'id1', 'id2')
 
-		qry = f"SELECT rowid FROM {table} WHERE {id_col1} = ? AND {id_col2} = ?"
-		qry_val = [id1, id2]
-		res = [i[0] for i in self.curs.execute(qry, qry_val).fetchall()]
+	# 	qry = f"SELECT rowid FROM {table} WHERE {id_col1} = ? AND {id_col2} = ?"
+	# 	qry_val = [id1, id2]
+	# 	res = [i[0] for i in self.curs.execute(qry, qry_val).fetchall()]
 
-		return res # [rowid1, rowid2, ...]
+	# 	return res # [rowid1, rowid2, ...]
 
 
-	# db_get_values auxiliary function	    	
-	def db_get_value_single_id(self, table, id_col, val_col, id_): #(self, 'table', 'id_col', 'val_col', 'id')
-
-		row_ids = self.db_get_row_ids(table, id_col, id_) # [rowid1, rowid2, ...]
-
-		if not row_ids:
-
-			raise ValueError('Selected ID not in the table.')
-
-		else:
-
-			pass
-		
-		#print('row_id: ', row_ids)
-		res = np.array([]) # it can be str or NoneType
-
-		for i in row_ids:
-
+	# Get values array from single id    	
+	def get_values_single_id(self, table, id_col, val_col, id_): #(self, 'table', 'id_col', 'val_col', 'id')
+		rowids = self.get_rowids(table, id_col, id_) # [rowid1, rowid2, ...]
+		res = np.empty((1,0), dtype=str) # it can be str or None
+		for rowid in rowids:
 			qry = f'SELECT {val_col} FROM {table} WHERE rowid = ?'
-			qry_val = [i]
-			val = self.curs.execute(qry, qry_val).fetchall()[0][0]# from [(val,)] to val T.B.N. in case of no result the output is [(None,)]
-
-			if val != None:
-
-				val = np.asarray([val], dtype = str)
-
-			else:
-
-				val = np.asarray([val])
-
+			qry_arg = (rowid,)
+			self.curs.execute(qry, qry_arg)
+			val = self.curs.fetchall()[0] # (val,)
 			res = np.append(res, val)
+		return res # array([val1, val2, ...])
 
-		# if the value is scalar parentheses are removed
-		if res.size == 1:
-
-			res = res[0]
-
-		return res # val / array([val1, val2, ...])
-
-
-	
-
-
-	def db_update_values_single_id(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
-
-		row_ids = self.db_get_row_ids(table, id_col, id_)
-
-		# print('query data: ', table, id_col, val_col, id_, val)
-		# print('row ids: ', row_ids)
- 
-		if not hasattr(val, "__len__"):
-
-			val = [val]
-
-		else:
-
-			pass
-
-		if len(val) != len(row_ids):
-
+	# Update values array from single id
+	def update_values(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
+		rowids = self.get_rowids(table, id_col, id_)
+		if len(val) != len(rowids):
 			raise ValueError('Wrong number of input values.')
-
-			# if len(val) == 1:
-
-			# 	val = [val for i in range(len(row_ids))]
-
-			# else:
-
-			# 	raise ValueError('Wrong number of input values.')
-
-		for i, j in zip(val, row_ids):
-
-			#print('vals to update:', i, j)
-
+		for i, j in zip(val, rowids):
 			qry = f'UPDATE {table} SET {val_col} = ? WHERE rowid = ?'
-			qry_val = [i, j]
+			qry_args = (i, j)
 			self.curs.execute(qry, qry_val)
-		
-		self.conn.commit()
+	
 		
 
 	# def update_function_val(self, table, id_col, val_col, sect_perc_col, id_, val, sect_perc):
@@ -134,68 +80,63 @@ class Db(object):
 # 		self.curs.executemany(qry, qry_val)
 # 		self.commit()
 
+	# # Get values array from multiple ids
+	# def get_values_multi_ids(self, tables, id_cols, val_cols, ids): # (self, ['table1', 'table2', ...], ['id_col1', 'id_col2', ...], ['val_col1', 'val_col2', ...], ['id1', 'id2', ...]
+	# 	# Prepare data to pass them into the function as arguments (arguments must have all the same dimensions)
+	# 	# If arguments have different sizes, all the shorter ones are increased in size to match the longest one
+	# 	args = [tables, id_cols, val_cols, ids]
+	# 	# If all the arguments have the same size no one has to be fixed
+	# 	all_same_length = True
+	# 	for i in range(0, len(args) - 1):
 
-	def db_get_values(self, tables, id_cols, val_cols, ids): #(self, list(['table1', 'table2', ...]), list(['id_col1', 'id_col2', ...]), list(['val_col1', 'val_col2', ...]), list(['id1', 'id2', ...])
+	# 		all_same_length = all_same_length and (len(args[i]) == len(args[i + 1]))
 
-		# Prepare data to pass them into the function as arguments (arguments must have all the same dimensions)
-		# If arguments have different sizes, all the shorter ones are increased in size to match the longest one
-		args = [tables, id_cols, val_cols, ids]
+	# 	# Fix arguments length
+	# 	if not all_same_length:
 
-		# If all the arguments have the same size no one has to fixed
-		all_same_length = True
+	# 		max_len_arg = max(args, key = len)
+	# 		max_arg_len = len(max_len_arg)
 
-		for i in range(0, len(args) - 1):
+	# 		for i in range(0, len(args)):
 
-			all_same_length = all_same_length and (len(args[i]) == len(args[i + 1]))
+	# 			if len(args[i]) != max_arg_len:
 
-		# Fix arguments length
-		if not all_same_length:
+	# 				args[i] = [args[i][0] for j in range(0, max_arg_len)]
 
-			max_len_arg = max(args, key = len)
-			max_arg_len = len(max_len_arg)
+	# 	else:
 
-			for i in range(0, len(args)):
+	# 		pass
 
-				if len(args[i]) != max_arg_len:
+	# 	tables, id_cols, val_cols, ids = args # unpack fixed arguments
 
-					args[i] = [args[i][0] for j in range(0, max_arg_len)]
+	# 	# Function main part 
+	# 	res = [] # initialize res
 
-		else:
+	# 	for i, j, k, l in zip(tables, id_cols, val_cols, ids):
 
-			pass
+	# 		res_i = self.db_get_value_single_id(i, j, k, l)
 
-		tables, id_cols, val_cols, ids = args # unpack fixed arguments
+	# 		res.append(res_i)
 
-		# Function main part 
-		res = [] # initialize res
-
-		for i, j, k, l in zip(tables, id_cols, val_cols, ids):
-
-			res_i = self.db_get_value_single_id(i, j, k, l)
-
-			res.append(res_i)
-
-		return res # list([val1, [val11, val12, ...], ...])
+	# 	return res # list([val1, [val11, val12, ...], ...])
 
 
-	def db_get_whole_column(self, table, val_col): #(db(), 'table', 'val_col')
-
+	def get_whole_column(self, table, val_col): #(db(), 'table', 'val_col')
 		qry = f"SELECT {val_col} FROM {table}"
 		vals = np.asarray(self.curs.execute(qry).fetchall(), dtype = str) # from [(val1,), (val2,), ...] to array(['val1', 'val2', ...])
 		res = vals[:, 0].tolist()
-
 		return res # list(['val1', 'val2', ...])
 
 
-	def db_get_row_count(self, table, id_col, ids): #(db(), str, str, [int])
+	# def db_get_row_count(self, table, id_col, ids): #(db(), str, str, [int])
 
-		row_ids = self.db_get_row_ids(table, id_col, ids)
-		res = len(row_ids)
+	# 	row_ids = self.db_get_row_ids(table, id_col, ids)
+	# 	res = len(row_ids)
 
-		return res # int
+	# 	return res # int
 
 
-	def db_update_values(self, tables, id_col, val_col, ids, vals): #(self, array([[table1], [table2], ...]), array([[id_col1], [id_col2], ...]), array([[val_col1], [val_col2], ...]), array([[id1], [id2], ...], array([[val1], [val2], ...])
+	def update_values_multi_id(self, tables, id_col, val_col, ids, vals): #(self, array([[table1], [table2], ...]), array([[id_col1], [id_col2], ...]), array([[val_col1], [val_col2], ...]), array([[id1], [id2], ...], array([[val1], [val2], ...])
 
 		for i, j, k, l, m in zip(tables, val_col, id_col, ids, vals):
 
@@ -205,7 +146,7 @@ class Db(object):
 			self.conn.commit()
 
 
-class SettingsDb(Db):
+class SettingsDb(DataBase):
 
 	def __init__(self, path):
 

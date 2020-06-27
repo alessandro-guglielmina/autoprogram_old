@@ -1,108 +1,40 @@
 from pathlib import Path
 import sys
-
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 import math
 
-from autoprogram import db_manager as dbm
+from autoprogram import config
+from autoprogram import wbmodule as wbm
 
+# Common variables namespace
+class Variables(object):
 
+	input_values_wb = wbm.InputValuesWorkBook(config.input_values_wb_path)
 
+	# tool_name = None
+	# fam_name = None
+	# fam_prog_dir = None
+	# fam_prog_list = None
+	# file_suffix = None
+	# tool_type = None
+	# diam = None
+	# flute_len = None
+	# diam_addr = None
+	# flute_len_addr = None
+	# data = None
+	# prog_filename = None
+	# prog = None
+	# low_prog_filename = None
+	# up_prog_filename = None
+	# up_diam = None
+	# low_diam = None
+	# point_ang_addr = None
+	# first_spg_addr = None
+	# meas_dist_addr = None
 
-copyright_header = 'AutoProgram.\nCopyright \xa9 2020 Guglielmina Alessandro. All rights reserved.'
-
-# settings_path = Path('AutoProgram/settings.db')
-settings_path = Path('autoprogram/settings.db')
-settings = dbm.settings_db(settings_path)
-
-master_dir_path = Path('AutoProgram/master_programs')
-res_prog_dir = Path.home().joinpath('Work folders/Roaming/Desktop')
-
-
-
-# Class acting as namespace
-class variables_class(object):
-
-	vgp_file_suffix = '.vgp'
-	tom_file_suffix = '.tom'
-	tool_name = 'RES_PROGRAM'
-	fam_name = None # array([['fam']])
-	fam_prog_dir = None
-	fam_prog_list = None
-	file_suffix = None
-	tool_type = None
-	diam = None
-	flute_len = None
-	diam_addr = None
-	flute_len_addr = None
-	data = None # names, relations, descriptions, addresses, sect percs, values
-	prog_filename = None
-	prog = None
-	low_prog_filename = None
-	up_prog_filename = None
-	up_diam = None
-	low_diam = None
-	point_ang_addr = None
-	first_spg_addr = None
-	meas_dist_addr = None
-
-variables = variables_class()
-
-# Class acting as namespace
-class functions_class(object):
-
-	def get_tool_type(self):
-
-		family_name = variables.fam_name
-
-		if 'DRILL' in variables.fam_name.upper():
-
-			variables.tool_type = 'drill'
-
-		elif 'MILL' in variables.fam_name.upper():
-
-			variables.tool_type = 'mill'
-
-		elif 'REAMER' in variables.fam_name.upper():
-
-			variables.tool_type = 'reamer'
-
-		else:
-
-			raise ValueError('Unknown tool type.')
-
-		print("Tool type is: " + variables.tool_type)
-
-
-
-	# Initialize diameter and flute names
-	def get_variable_names(self):
-
-		# update diam and flute names depending on file suffix and tool type
-		if variables.file_suffix == '.vgp':
-
-			if variables.tool_type == 'drill':
-
-				variables.diam_addr = 'Rollomatic.LibCurve.Data.Curves.ToolProfileCurve@D0'
-				variables.flute_len_addr = 'one_tooth.all_teeth.drill_type.drill_type1.n_Types.allFlute.flutes.flutes1.diamEdge.fluteLength'
-				variables.point_ang_addr = 'Rollomatic.LibCurve.Data.Curves.ToolProfileCurve@pA'
-				variables.first_spg_addr = 'one_tooth.all_teeth.drill_type.drill_type1.n_Types.point.endrelief_from_attribute.oneAttribute.oneAttribute1.od_relief.multi_relief_allmulti.multi_relief.multi_relief1.rel_intern.relief_op_complete.relief_op_complete1.normal_field.func_relief_angle'
-				variables.meas_dist_addr = 'one_tooth.all_teeth.drill_type.drill_type1.n_Types.allFlute.flutes.flutes1.flute.flute_op.flute_op.flute_one_multi.flute_one_multi1.flute_Simple_Ext_.flute_Lw_X.flute_Simple_Choices.pourcent_rake_in'
-
-			else:
-
-				raise ValueError("Tool type names not inserted yet.")
-
-		else:
-
-			raise ValueError('File suffix not valid.')
-
-functions = functions_class()
-
-
-class relations_class(object):
+class Relations(object):
 
 	def prepare_args(self, args, res_addr): # (self, ['args'], ['res_addr'])
 
@@ -451,4 +383,4 @@ class relations_class(object):
 			  }
 
 
-relations = relations_class()
+relations = Relations()
