@@ -5,13 +5,13 @@ import pandas as pd
 from scipy.interpolate import interp1d
 import math
 
-from autoprogram import config
+from autoprogram import settings
 from autoprogram import wbmodule as wbm
 
 # Common variables namespace
 class Variables(object):
 
-	input_values_wb = wbm.InputValuesWorkBook(config.input_values_wb_path)
+	values_database_wb = wbm.ValuesDbWorkBook(settings.values_database_wb_path)
 
 	# tool_name = None
 	# fam_name = None

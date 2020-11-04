@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 import shutil
 
-from autoprogram import config
+from autoprogram import settings
 from autoprogram import common
+from autoprogram import uimodule as ui
 from autoprogram import wbmodule as wbm
 from autoprogram import progmodule as pm
 
@@ -28,53 +29,10 @@ class Position(object):
 		sys.exit(1)
 
 	@classmethod
-	# This function return the user inputs
-	def user_input(cls, ch_list = None, ch_ids = None, cast = None, print_list = None): #(ch_list, ch_id, cast, print_list)
-		# If there is a list of choices
-		if ch_list is not None and ch_ids is not None:
-			cast = str
-			bound_val = True
-			print_list = ''
-			for i, j in zip(ch_ids, ch_list):
-				print_list = print_list + f'Enter {i} for {j}\n'
-			print_list = [print_list]
-		# if there isn't
-		elif cast is not None and print_list is not None:
-			bound_val = False
-		else:
-			raise ValueError('Wrong arguments combination.')
-		inp_list = []
-		converted = False
-		for i in print_list:
-			os.system('clear')
-			while True:
-				try:
-					inp_i = cast(input(f'{i}\n> ')) # user input call
-					if bound_val: # (so cast = str and ch_id must be given)
-						inp_i = inp_i.upper() # the choice must be capital to make the choice case insensitive
-						if inp_i in ch_ids:
-							bool_filt = [i == inp_i for i in ch_ids]
-							ch = list(compress(ch_list, bool_filt))[0] # use boolean indexing on a list
-							inp_i = ch # inp_val_i is reassigned with the choice corresponding to the chosen index
-							converted = True
-						else:
-							os.system('clear')
-							print("Input non among the possible choices.\n")
-					if converted or not bound_val:
-						os.system('clear')
-						inp_list.append(inp_i)
-						print("You have entered: " + str(inp_i) + "\n")
-						break
-				except ValueError:
-					print("Wrong input type\n")
-		res = inp_list
-		return res # list([inp1, inp2, ...])
-
-	@classmethod
 	def select_position(cls):
 		ch_list = ['confirm', 'repeat', 'move back']
 		ch_ids = ['C', 'R', 'B']
-		ch = cls.user_input(ch_list = ch_list, ch_ids = ch_ids)
+		ch = ui.user_input(ch_list = ch_list, ch_ids = ch_ids)
 		pos_select = ch[0]
 		if (pos_select == 'confirm'):
 			next_pos = cls.follow_pos
@@ -84,7 +42,7 @@ class Position(object):
 			next_pos = cls.prev_pos
 		return next_pos
 
-# This is the program phase in which the information carrier is initialized with the familiy name (provided by the user)
+# This is the first program step in which the information carrier is initialized with the familiy name (provided by the user)
 class Initialize(Position):
 
 	prev_pos = 'initialize'
@@ -94,36 +52,31 @@ class Initialize(Position):
 	@classmethod
 	def activate(cls): #()
 		cls.insert_preliminary_data()
-		cls.get_fam_prog_data()
+		cls.get_fam_prog_list()
 		cls.get_tool_type()
 		cls.get_val_addr()
 		cls.get_common_data()
 		return cls.select_position()
 
-	# Get the family names from the master programs directories
+	# Get the family names from the family directories inside the master programs directory
 	@classmethod
 	def get_fam_names(cls):
-		return [str(fam_dir.name) for fam_dir in config.master_progs_dir.iterdir() if fam_dir.is_dir()]
+		return [str(fam_dir.name) for fam_dir in settings.master_progs_dir.iterdir() if fam_dir.is_dir()]
 
 	# Get the family name from user
 	@classmethod
 	def insert_preliminary_data(cls):
 		# Acquire tool name
-		common.Variables.tool_name = input('Insert tool name:\n>')
+		# common.Variables.tool_name = input('Insert tool name:\n>')
 		# Create array containing all family names (string format)
 		fam_name_list = cls.get_fam_names() # ['fam1', 'fam2', ...]
-		# Create list containing family id (string format)
-		fam_name_ids = [str(i + 1) for i in list(range(len(fam_name_list)))]
-		# Acquire user input
-		print('Select family:\n')
-		common.Variables.fam_name = cls.user_input(ch_list = fam_name_list, ch_ids = fam_name_ids)[0] # 'ch_fam'
-		os.system('clear')
+		# Select family
+		ui.select_family(fam_name_list)
 
 	@classmethod
-	def get_fam_prog_data(cls):
-
-		fam_prog_dir = Path(config.master_progs_dir/common.Variables.fam_name)
-		common.Variables.fam_prog_list = list(fam_prog_dir.glob('**/*'))
+	def get_fam_prog_list(cls):
+		fam_prog_dir = Path(settings.master_progs_dir/common.Variables.fam_name)
+		common.Variables.fam_prog_list = list(fam_prog_dir.glob('*' + settings.vgp_suffix))
 		common.Variables.file_suffix = common.Variables.fam_prog_list[0].suffix
 
 	# Get the tool type from the family name (which must contain the tool type, e.g. 'drill', 'mill', ...)
@@ -137,7 +90,7 @@ class Initialize(Position):
 			common.Variables.tool_type = 'reamer'
 		else:
 			raise ValueError('No such a tool type.')
-		print("Tool type is: " + common.Variables.tool_type)
+		ui.print_tool_type()
 
 	# Get the common data needed in the following steps
 	@classmethod
@@ -148,13 +101,13 @@ class Initialize(Position):
 	@classmethod
 	def get_val_addr(cls):
 		# Update diam and flute names depending on file suffix and tool type
-		if common.Variables.file_suffix == config.vgp_suffix:
+		if common.Variables.file_suffix == settings.vgp_suffix:
 			if common.Variables.tool_type == 'drill':
-				common.Variables.diam_addr = config.drill_diam_addr
-				common.Variables.flute_len_addr = config.drill_flute_len_addr
-				# common.Variables.point_ang_addr = config.drill_point_ang_addr
-				# common.Variables.first_spg_addr = config.drill_first_spg_addr
-				# common.Variables.meas_dist_addr = config.drill_meas_dist_addr
+				common.Variables.diam_addr = settings.drill_diam_addr
+				common.Variables.flute_len_addr = settings.drill_flute_len_addr
+				# common.Variables.point_ang_addr = settings.drill_point_ang_addr
+				# common.Variables.first_spg_addr = settings.drill_first_spg_addr
+				# common.Variables.meas_dist_addr = settings.drill_meas_dist_addr
 			elif common.Variables.tool_type == 'mill':
 				pass
 			else:
@@ -187,7 +140,7 @@ class InsertParameters(Position):
 		print_list = [f'Enter {i}: ' for i in descr_list]
 		# Get user input
 		print('Insert parameters:\n')
-		inp_vals = cls.user_input(cast = float, print_list = print_list)
+		inp_vals = ui.user_input(cast = float, print_list = print_list)
 		# Input values have no relation, this feature is used to refence them in common data
 		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = inp_vals # isnull() needed to reference None values
 
@@ -325,7 +278,7 @@ class Machine(object):
 
 	@classmethod
 	def run(cls):
-		print(config.copyright_header)
+		print(settings.copyright_header)
 		current_position = cls.go_to_position(cls.first_position_name) # start position
 		while current_position != cls.go_to_position(cls.last_position_name):
 			next_position_name = current_position.activate() # return position name chosen in the position, and acquire user input while running (if any)

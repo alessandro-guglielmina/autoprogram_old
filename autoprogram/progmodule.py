@@ -2,14 +2,14 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-from autoprogram import config
+from autoprogram import settings
 from autoprogram import common
 from autoprogram import dbmodule as dbm
 
 
 # Function allowing to choose the correct object depending on the file extension
 def prog_select(path):
-	if common.Variables.file_suffix == config.vgp_suffix:
+	if common.Variables.file_suffix == settings.vgp_suffix:
 		res = VgpProg(path)
 		return res
 	else:

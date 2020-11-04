@@ -56,7 +56,7 @@ class WorkBook(object):
 
 	# 	return res # list([addr1, addr2, ...])
 
-class InputValuesWorkBook(WorkBook):
+class ValuesDbWorkBook(WorkBook):
 
 	def __init__(self, path):
 		super().__init__(path)
@@ -66,7 +66,7 @@ class InputValuesWorkBook(WorkBook):
 		val_names = self.get_whole_column(fam_name, 'val_name')
 		rels = self.get_whole_column(fam_name, 'rel')
 		# Get val_addr, val_descr (DataFrame)
-		act_sheet = self.wb['general_values']
+		act_sheet = self.wb[0]
 		try:
 			val_addr = act_sheet.val_addr[act_sheet.val_name.isin(val_names)].to_numpy()
 			val_addr[pd.isnull(val_addr)] = None # pd.isnull needed to address nan values
@@ -88,3 +88,9 @@ class InputValuesWorkBook(WorkBook):
 		if not (common.Variables.diam_addr in res.val_addr.tolist() and common.Variables.flute_len_addr in res.val_addr.tolist()):
 			raise ValueError('Diameter or flute length value missing.')
 		return res # DataFrame('val_addr', 'val_type', 'val_descr')
+
+
+class ConfigValuesWorkBook(WorkBook):
+	
+	def __init__(self, path):
+		super().__init__(path)
