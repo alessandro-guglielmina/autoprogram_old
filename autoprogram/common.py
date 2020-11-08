@@ -11,7 +11,15 @@ from autoprogram import wbmodule as wbm
 # Common variables namespace
 class Variables(object):
 
-	values_database_wb = wbm.ValuesDbWorkBook(settings.values_database_wb_path)
+	copyright_header = settings.copyright_header
+	master_progs_dir = Path(settings.master_progs_dir)
+	res_prog_dir = Path.home().joinpath(settings.res_prog_dir)
+	values_database_wb = wbm.WorkBook(Path(master_progs_dir / settings.values_database_wb_filename))
+	config_vals_wb_filename = settings.config_vals_wb_filename
+	cutting_params_wb_filename = settings.cutting_params_wb_filename
+	vgp_suffix = settings.vgp_suffix
+
+	drill_diam_addr = settings.drill_diam_addr
 
 	# tool_name = None
 	# fam_name = None

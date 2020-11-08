@@ -62,11 +62,11 @@ class DataBase(object):
 	# Update values array from single id
 	def update_values(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
 		rowids = self.get_rowids(table, id_col, id_)
-		if len(val) != len(rowids):
+		if hasattr(val, "__len__") and len(val) != len(rowids):
 			raise ValueError('Wrong number of input values.')
 		for i, j in zip(val, rowids):
 			qry = f'UPDATE {table} SET {val_col} = ? WHERE rowid = ?'
-			qry_args = (i, j)
+			qry_val = (i, j)
 			self.curs.execute(qry, qry_val)
 	
 		
@@ -80,45 +80,45 @@ class DataBase(object):
 # 		self.curs.executemany(qry, qry_val)
 # 		self.commit()
 
-	# # Get values array from multiple ids
-	# def get_values_multi_ids(self, tables, id_cols, val_cols, ids): # (self, ['table1', 'table2', ...], ['id_col1', 'id_col2', ...], ['val_col1', 'val_col2', ...], ['id1', 'id2', ...]
-	# 	# Prepare data to pass them into the function as arguments (arguments must have all the same dimensions)
-	# 	# If arguments have different sizes, all the shorter ones are increased in size to match the longest one
-	# 	args = [tables, id_cols, val_cols, ids]
-	# 	# If all the arguments have the same size no one has to be fixed
-	# 	all_same_length = True
-	# 	for i in range(0, len(args) - 1):
+	# Get values array from multiple ids
+	def get_values_multi_ids(self, tables, id_cols, val_cols, ids): # (self, ['table1', 'table2', ...], ['id_col1', 'id_col2', ...], ['val_col1', 'val_col2', ...], ['id1', 'id2', ...]
+		# Prepare data to pass them into the function as arguments (arguments must have all the same dimensions)
+		# If arguments have different sizes, all the shorter ones are replicated to match the longest one
+		args = [tables, id_cols, val_cols, ids]
+		# If all the arguments have the same size no one has to be fixed
+		all_same_length = True
+		for i in range(0, len(args) - 1):
 
-	# 		all_same_length = all_same_length and (len(args[i]) == len(args[i + 1]))
+			all_same_length = all_same_length and (len(args[i]) == len(args[i + 1]))
 
-	# 	# Fix arguments length
-	# 	if not all_same_length:
+		# Fix arguments length
+		if not all_same_length:
 
-	# 		max_len_arg = max(args, key = len)
-	# 		max_arg_len = len(max_len_arg)
+			max_len_arg = max(args, key = len)
+			max_arg_len = len(max_len_arg)
 
-	# 		for i in range(0, len(args)):
+			for i in range(0, len(args)):
 
-	# 			if len(args[i]) != max_arg_len:
+				if len(args[i]) != max_arg_len:
 
-	# 				args[i] = [args[i][0] for j in range(0, max_arg_len)]
+					args[i] = [args[i][0] for j in range(0, max_arg_len)]
 
-	# 	else:
+		else:
 
-	# 		pass
+			pass
 
-	# 	tables, id_cols, val_cols, ids = args # unpack fixed arguments
+		tables, id_cols, val_cols, ids = args # unpack fixed arguments
 
-	# 	# Function main part 
-	# 	res = [] # initialize res
+		# Function main part 
+		res = np.empty((1,0), dtype=str) # initialize res
 
-	# 	for i, j, k, l in zip(tables, id_cols, val_cols, ids):
+		for i, j, k, l in zip(tables, id_cols, val_cols, ids):
 
-	# 		res_i = self.db_get_value_single_id(i, j, k, l)
+			res_i = self.get_values_single_id(i, j, k, l)
 
-	# 		res.append(res_i)
+			res = np.append(res, res_i)
 
-	# 	return res # list([val1, [val11, val12, ...], ...])
+		return res # list([val1, [val11, val12, ...], ...])
 
 
 	def get_whole_column(self, table, val_col): #(db(), 'table', 'val_col')
@@ -136,7 +136,7 @@ class DataBase(object):
 	# 	return res # int
 
 
-	def update_values_multi_id(self, tables, id_col, val_col, ids, vals): #(self, array([[table1], [table2], ...]), array([[id_col1], [id_col2], ...]), array([[val_col1], [val_col2], ...]), array([[id1], [id2], ...], array([[val1], [val2], ...])
+	def update_values_multi_ids(self, tables, id_col, val_col, ids, vals): #(self, array([[table1], [table2], ...]), array([[id_col1], [id_col2], ...]), array([[val_col1], [val_col2], ...]), array([[id1], [id2], ...], array([[val1], [val2], ...])
 
 		for i, j, k, l, m in zip(tables, val_col, id_col, ids, vals):
 
@@ -146,80 +146,80 @@ class DataBase(object):
 			self.conn.commit()
 
 
-class SettingsDb(DataBase):
+# class SettingsDb(DataBase):
 
-	def __init__(self, path):
+# 	def __init__(self, path):
 
-		self.path = path
+# 		self.path = path
 
-		self.family_values_table = 'family_values'
-		self.general_values_table = 'general_values'
-		self.table_col = {
-						self.family_values_table : {'fam_name_col' : 'fam_name', 'val_name_col' : 'val_name', 'rel_name_col' : 'rel_name', 'rel_args_col' : 'rel_args'},
-						self.general_values_table : {'val_name_col' : 'val_name', 'val_descr_col' : 'val_descr', 'val_addr_col' : 'val_addr'},
-					}
+# 		self.family_values_table = 'family_values'
+# 		self.general_values_table = 'general_values'
+# 		self.table_col = {
+# 						self.family_values_table : {'fam_name_col' : 'fam_name', 'val_name_col' : 'val_name', 'rel_name_col' : 'rel_name', 'rel_args_col' : 'rel_args'},
+# 						self.general_values_table : {'val_name_col' : 'val_name', 'val_descr_col' : 'val_descr', 'val_addr_col' : 'val_addr'},
+# 					}
 
-		super().__init__(self.path)
-
-
-	def db_get_all_fam_names(self): #(self)
-
-		raw_names = self.db_get_whole_column(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col']) # list(['fam1', 'fam1', 'fam2', ...]) with duplicates
-		res = list(dict.fromkeys(raw_names)) # delete duplicates and keep order
-
-		return res # list(['fam1', 'fam2', ...])
+# 		super().__init__(self.path)
 
 
+# 	def db_get_all_fam_names(self): #(self)
 
-	def db_get_addr_from_names(self, val_names): #(self, list(['val_name1', 'val_name2', ...]))
+# 		raw_names = self.db_get_whole_column(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col']) # list(['fam1', 'fam1', 'fam2', ...]) with duplicates
+# 		res = list(dict.fromkeys(raw_names)) # delete duplicates and keep order
 
-		res = self.db_get_values([self.general_values_table], [self.table_col[self.general_values_table]['val_name_col']],\
-			  [self.table_col[self.general_values_table]['val_addr_col']], val_names)
-
-		return res # list([addr1, addr2, ...])
+# 		return res # list(['fam1', 'fam2', ...])
 
 
 
+# 	def db_get_addr_from_names(self, val_names): #(self, list(['val_name1', 'val_name2', ...]))
 
-	def db_get_fam_data(self, fam_name): #(settings_db(), 'fam_name')
+# 		res = self.db_get_values([self.general_values_table], [self.table_col[self.general_values_table]['val_name_col']],\
+# 			  [self.table_col[self.general_values_table]['val_addr_col']], val_names)
 
-		# Value names are considered as a function value
-		val_names = self.db_get_value_single_id(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col'],\
-				self.table_col[self.family_values_table]['val_name_col'], fam_name) # get names needed to search addresses and description in "general_values" table
+# 		return res # list([addr1, addr2, ...])
 
-		# Relation names are considered as a function value
-		rel_names = self.db_get_value_single_id(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col'],\
-			self.table_col[self.family_values_table]['rel_name_col'], fam_name) # get family_s relations
 
-		# Relation argument names are considered as a function value
-		rel_args = self.db_get_value_single_id(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col'],\
-			self.table_col[self.family_values_table]['rel_args_col'], fam_name) # relation arguments names contains strings and None values
-		#rel_argss_temp = rel_argss[rel_argss != None] # get rid of None values
 
-		descr = self.db_get_values([self.general_values_table], [self.table_col[self.general_values_table]['val_name_col']],\
-			[self.table_col[self.general_values_table]['val_descr_col']], val_names) # get descriptions from "general_values table"
 
-		sect_percs = [None for i in val_names]
+# 	def db_get_fam_data(self, fam_name): #(settings_db(), 'fam_name')
 
-		vals = [None for i in val_names]
+# 		# Value names are considered as a function value
+# 		val_names = self.db_get_value_single_id(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col'],\
+# 				self.table_col[self.family_values_table]['val_name_col'], fam_name) # get names needed to search addresses and description in "general_values" table
 
-		val_addr = self.db_get_addr_from_names(val_names) # get addresses from "general_values" table
+# 		# Relation names are considered as a function value
+# 		rel_names = self.db_get_value_single_id(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col'],\
+# 			self.table_col[self.family_values_table]['rel_name_col'], fam_name) # get family_s relations
 
-		#rel_arg_addr_temp = self.db_get_addr_from_names(rel_argss_temp)
-		#rel_arg_addr = np.asarray(rel_argss)
-		#rel_arg_addr[rel_arg_addr != None] = rel_arg_addr_temp
+# 		# Relation argument names are considered as a function value
+# 		rel_args = self.db_get_value_single_id(self.family_values_table, self.table_col[self.family_values_table]['fam_name_col'],\
+# 			self.table_col[self.family_values_table]['rel_args_col'], fam_name) # relation arguments names contains strings and None values
+# 		#rel_argss_temp = rel_argss[rel_argss != None] # get rid of None values
 
-		#res = pd.DataFrame(list(zip(names_df, rel_names_df, descr_df, addr_df, vals_df)), columns =['names', 'rel_names', 'descr', 'addr', 'vals'])
+# 		descr = self.db_get_values([self.general_values_table], [self.table_col[self.general_values_table]['val_name_col']],\
+# 			[self.table_col[self.general_values_table]['val_descr_col']], val_names) # get descriptions from "general_values table"
+
+# 		sect_percs = [None for i in val_names]
+
+# 		vals = [None for i in val_names]
+
+# 		val_addr = self.db_get_addr_from_names(val_names) # get addresses from "general_values" table
+
+# 		#rel_arg_addr_temp = self.db_get_addr_from_names(rel_argss_temp)
+# 		#rel_arg_addr = np.asarray(rel_argss)
+# 		#rel_arg_addr[rel_arg_addr != None] = rel_arg_addr_temp
+
+# 		#res = pd.DataFrame(list(zip(names_df, rel_names_df, descr_df, addr_df, vals_df)), columns =['names', 'rel_names', 'descr', 'addr', 'vals'])
 		
-		res = pd.DataFrame({
-                     		'descr': pd.Series(descr, dtype = 'str'),
-                     		'sect_perc': pd.Series(sect_percs, dtype = 'object'),
-                     		'val': pd.Series(vals, dtype = 'object'),
-                     		'val_addr': pd.Series(val_addr, dtype = 'str'),
-                     		'val_name': pd.Series(val_names, dtype = 'str'),
-                     		'rel': pd.Series(rel_names, dtype = 'str'),
-                     		'rel_args': pd.Series(rel_args, dtype = 'str')
-                     		})
+# 		res = pd.DataFrame({
+#                      		'descr': pd.Series(descr, dtype = 'str'),
+#                      		'sect_perc': pd.Series(sect_percs, dtype = 'object'),
+#                      		'val': pd.Series(vals, dtype = 'object'),
+#                      		'val_addr': pd.Series(val_addr, dtype = 'str'),
+#                      		'val_name': pd.Series(val_names, dtype = 'str'),
+#                      		'rel': pd.Series(rel_names, dtype = 'str'),
+#                      		'rel_args': pd.Series(rel_args, dtype = 'str')
+#                      		})
 		
 
-		return res #DataFrame([[n1, r1, d1, a1, v1], [n2, r2, d2, a2, v2], ...])
+# 		return res #DataFrame([[n1, r1, d1, a1, v1], [n2, r2, d2, a2, v2], ...])

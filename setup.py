@@ -10,8 +10,8 @@ config = {
 'download_url': '/',
 'author_email': 'alessandro.guglielmina@gmail.com',
 'version': '0.1',
-'install_requires': ['nose'],
-'packages': ['AutoProgram'],
+'install_requires': [],
+'packages': [],
 'scripts': [],
 'name': 'projectname'
 }

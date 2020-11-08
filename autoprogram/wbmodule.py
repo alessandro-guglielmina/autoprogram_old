@@ -7,12 +7,12 @@ class WorkBook(object):
 
 	def __init__(self, path):
 		self.path = path
-		self.wb = pd.read_excel(self.path, sheet_name =None, dtype=str) # read all the sheets
+		self.wb = pd.read_excel(self.path, sheet_name = 0, dtype=str) # read all the sheets in the workbook
 
 	# Get values array from single id
-	def get_values_single_id(self, sheet, id_col, val_col, id_): # (self, 'sheet', 'id_col', 'val_col', 'id')
+	def get_values_single_id(self, id_col, val_col, id_): # (self, 'sheet', 'id_col', 'val_col', 'id')
 		try:
-			act_sheet = self.wb[sheet]
+			act_sheet = self.wb
 		# If the sheet name is not in the wb returns ValueError
 		except KeyError:
 			raise ValueError(f'There is no {sheet} sheet in the workbook {self.path}.')
@@ -29,17 +29,17 @@ class WorkBook(object):
 		return res
 
 	# Get values array from single id
-	def get_values_multi_ids(self, sheet, id_col, val_col, ids): # (self, 'sheet', 'id_col', 'val_col', ['id1', 'id2', ...])
+	def get_values_multi_ids(self, id_col, val_col, ids): # (self, 'sheet', 'id_col', 'val_col', ['id1', 'id2', ...])
 		res = np.empty((1,0), dtype=str)
 		for id_ in ids:
-			np.append(res, self.get_values_single_id(sheet, id_col, val_col, id_))
+			np.append(res, self.get_values_single_id(id_col, val_col, id_))
 		# Set nan values as None (pd.isna() method needed to address np.nan values)
 		res[pd.isna(res)] = None
 		return res # array([val1, val2, ...])
 
-	def get_whole_column(self, sheet, val_col): # (self, 'sheet', 'val_col')
+	def get_whole_column(self, val_col): # (self, 'sheet', 'val_col')
 		try:
-			act_sheet = self.wb[sheet]
+			act_sheet = self.wb
 		# If the sheet name is not in the wb returns ValueError
 		except KeyError:
 			raise ValueError(f'There is no {sheet} sheet in the workbook {self.path}.')
@@ -56,41 +56,31 @@ class WorkBook(object):
 
 	# 	return res # list([addr1, addr2, ...])
 
-class ValuesDbWorkBook(WorkBook):
+def get_common_data():
 
-	def __init__(self, path):
-		super().__init__(path)
-
-	def get_common_data(self, fam_name): # (self, 'fam_name')
-		# Get fam_val_names, and fam_rels (arrays)
-		val_names = self.get_whole_column(fam_name, 'val_name')
-		rels = self.get_whole_column(fam_name, 'rel')
-		# Get val_addr, val_descr (DataFrame)
-		act_sheet = self.wb[0]
-		try:
-			val_addr = act_sheet.val_addr[act_sheet.val_name.isin(val_names)].to_numpy()
-			val_addr[pd.isnull(val_addr)] = None # pd.isnull needed to address nan values
-			val_descr = act_sheet.val_descr[act_sheet.val_name.isin(val_names)].to_numpy()
-			val_descr[pd.isnull(val_descr)] = None # pd.isnull needed to address nan values
-		except KeyError:
-			raise ValueError(f"Some values are missing from the 'general_values' sheet.")
-		# Sect-percs and vals are set to None
-		sect_percs = np.array([None for i in val_names])
-		vals = np.array([None for i in val_names])
-		# Build the common data DataFrame
-		res = pd.DataFrame({	'val_name': pd.Series(val_names, dtype='str'),
-			             		'rel': pd.Series(rels, dtype='str'),
-			             		'val_addr': pd.Series(val_addr, dtype='str'),
-			             		'val_descr': pd.Series(val_descr, dtype='str'),
-			             		'sect_perc': pd.Series(sect_percs, dtype='object'),
-			             		'val': pd.Series(vals, dtype='object')
-			             		})
-		if not (common.Variables.diam_addr in res.val_addr.tolist() and common.Variables.flute_len_addr in res.val_addr.tolist()):
-			raise ValueError('Diameter or flute length value missing.')
-		return res # DataFrame('val_addr', 'val_type', 'val_descr')
-
-
-class ConfigValuesWorkBook(WorkBook):
-	
-	def __init__(self, path):
-		super().__init__(path)
+	# Get val_names and rels from the configuration values workbook
+	config_val_names = common.Variables.config_vals_wb.get_whole_column('val_name')
+	config_rels = common.Variables.config_vals_wb.get_whole_column('rel')
+	# Get val_addr and val_descr from the values database workbook
+	values_database_sheet = common.Variables.values_database_wb.wb # DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
+	try:
+		config_val_addr = values_database_sheet.val_addr[values_database_sheet.val_name.isin(config_val_names)].to_numpy()
+		config_val_addr[pd.isnull(config_val_addr)] = None # pd.isnull needed to address nan values
+		config_val_descr = values_database_sheet.val_descr[values_database_sheet.val_name.isin(config_val_names)].to_numpy()
+		config_val_descr[pd.isnull(config_val_descr)] = None # pd.isnull needed to address nan values
+	except KeyError:
+		raise ValueError(f"Some values are missing from the values database sheet.")
+	# Sect-percs and vals are set to None
+	config_sect_percs = np.array([None for i in config_val_names])
+	config_vals = np.array([None for i in config_val_names])
+	# Build the common data DataFrame
+	res = pd.DataFrame({	'val_name': pd.Series(config_val_names, dtype='str'),
+		             		'rel': pd.Series(config_rels, dtype='str'),
+		             		'val_addr': pd.Series(config_val_addr, dtype='str'),
+		             		'val_descr': pd.Series(config_val_descr, dtype='str'),
+		             		'sect_perc': pd.Series(config_sect_percs, dtype='object'),
+		             		'val': pd.Series(config_vals, dtype='object')
+		             		})
+	if not common.Variables.diam_addr in res.val_addr.tolist():
+		raise ValueError('Diameter value missing.')
+	return res # DataFrame('val_addr', 'val_type', 'val_descr')

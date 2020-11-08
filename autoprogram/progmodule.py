@@ -9,7 +9,7 @@ from autoprogram import dbmodule as dbm
 
 # Function allowing to choose the correct object depending on the file extension
 def prog_select(path):
-	if common.Variables.file_suffix == settings.vgp_suffix:
+	if path.suffix == common.Variables.vgp_suffix:
 		res = VgpProg(path)
 		return res
 	else:
@@ -28,33 +28,10 @@ def is_float(val):
 is_numeric = lambda x: any(list(map(is_float, x)))
 
 
-class Program(object):
-	# These Variables and functions must be created for the ANCA program too (then remove vgp_)
-	diam_name = 'diameter name not initialized'
-	flute_len_name = 'flute length name not initialized'
-
-	def prog_get_values_from_names(self):
-		print('Function prog_get_values_from_names not initialized.')
-
-	def prog_scale_values(self):
-		print('Function prog_scale_values not initialized.')
-
-	def prog_update_values_from_names(self):
-		print('Function prog_average_values not initialized.')
-
-	def prog_delta_dL(self):
-		print('Function delta_dL not initialized')
-
-	def prog_cls(self):
-		print('Function prog_cls not initialized.')
-
-
-
-class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRAM" AS PARENT OBJECT. "PROGRAM" IS INHERITED BY ANCA_PROG TOO
+class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRAM" AS PARENT OBJECT. "PROGRAM" IS INHERITED BY ANCA_PROG TOO
 	
 	def __init__(self, path):
-		with dbm.DataBase(path) as self.db:
-			pass
+		super().__init__(path)
 
 	Curve_table = 'Curve' 
 	Parameter_table = 'Parameter'
@@ -82,13 +59,13 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 		except IndexError:
 			raise ValueError('Wrong Parameter address.')
 		# Get the possible curve ids from Curve table
-		poss_curve_ids = self.db.get_values(self.Curve_table, self.table_col.loc[self.Curve_table, 'curve_type_col'],\
+		poss_curve_ids = self.get_values_single_id(self.Curve_table, self.table_col.loc[self.Curve_table, 'curve_type_col'],\
 						 self.table_col.loc[self.Curve_table, 'curve_id_col'], curve_type) # [poss_cu_id1, poss_cu_id2, ...]
 		# Get all the curve ids corresponding to the parameter name
-		same_name_curve_ids = self.db.get_values(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'name_col'],\
+		same_name_curve_ids = self.get_values_single_id(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'name_col'],\
 							  self.table_col.loc[self.Parameter_table, 'curve_id_col'], param_name)
 		# Get all the parameter ids corresponding to the parameter name
-		same_name_param_ids = self.db.get_values(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'name_col'],\
+		same_name_param_ids = self.get_values_single_id(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'name_col'],\
 							   self.table_col.loc[self.Parameter_table, 'id_col'], param_name)
 		# Collect curve ids and parameter ids in a DataFrame
 		param_data = pd.DataFrame({
@@ -108,8 +85,8 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 		# 	pass
 		# If the address is not in VGP_Data, it means that it's a Parameter
 		try:
-			dtype = self.db.get_values(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col'], self.table_col.loc[self.VGP_Data_table, 'datatype_col'], addr)
-			id_ = self.db.get_values(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col'], self.table_col.loc[self.VGP_Data_table,'id_col'], addr)
+			dtype = self.get_values_single_id(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col'], self.table_col.loc[self.VGP_Data_table, 'datatype_col'], addr)
+			id_ = self.get_values_single_id(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col'], self.table_col.loc[self.VGP_Data_table,'id_col'], addr)
 			res = np.asarray([[dtype, id_]])
 		# If get_values() returns a Parameter
 		except:
@@ -150,30 +127,26 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 	# Return a list containng both scalar values and function values in string format (to obtain float values the output must be cast!!!)
 	def get_values_from_qry_data(self, qry_data): #(self, DataFrame(['val_addr', 'table', 'id_col', 'sect_perc_col', 'val_col', 'id'])) T.B.N. addresses not belonging to tables 'Parameter', 'VGP_Value_Double' or 'VGP_Value_FunctionD' are automatically deleted
 		columns = ['sect_perc', 'val']
-		res = pd.DataFrame(columns = columns, dtype = str)
+		res = pd.DataFrame(columns = columns, dtype = float)
 		for i, row in qry_data.iterrows(): # row is the pd.Series corresponding to a specific row	
 			# If the value is a scalar value
 			if row.table in [self.Parameter_table, self.VGP_Value_Double_table]:
-				val = self.db.get_values(row.table, row.id_col, row.val_col, row.id) # value can be either a string or None
-				try:
-					val = val.strip(' mm°') # delete non numeric characters
-					val = float(val)
-					#res = res.append({'sect_perc' : None, 'val' : val}, ignore_index = True)
-				except:
-					pass
+				val = self.get_values_single_id(row.table, row.id_col, row.val_col, row.id) # value can be either an array of string or None values
+				val = self.get_values_single_id(row.table, row.id_col, row.val_col, row.id)
+				if val[0] is not None:
+					val = np.char.rstrip(val, ' mm°')
+					val = val.astype(float)
+				else:
+					val = np.array([np.nan])
 				res = res.append({'sect_perc' : None, 'val' : val}, ignore_index = True)
 			# If the value is a function value:
 			elif row.table == self.VGP_Value_FunctionD_table:
-				sect_perc = self.db.get_values(row.table, row.id_col, row.sect_perc_col, row.id) # value can be either array of strings or None values
-				val = self.db.get_values(row.table, row.id_col, row.val_col, row.id)
-				try:
-					np.char.rstrip(sect_perc, ' mm°')
-					np.char.rstrip(val, ' mm°')
-					sect_perc = sect_perc.astype(float)
-					val = val.astype(float)
-			 		#res = res = res.append({'sect_perc' : sect_perc, 'val' : val}, ignore_index = True)
-				except:
-			 		pass
+				sect_perc = self.get_values_single_id(row.table, row.id_col, row.sect_perc_col, row.id) # value can be either array of strings or None values
+				val = self.get_values_single_id(row.table, row.id_col, row.val_col, row.id)
+				np.char.rstrip(sect_perc, ' mm°')
+				np.char.rstrip(val, ' mm°')
+				sect_perc = sect_perc.astype(float)
+				val = val.astype(float)
 				res = res.append({'sect_perc' : sect_perc, 'val' : val}, ignore_index = True)
 		return res  # DataFrame(['sect_perc', 'val'])
 
@@ -197,15 +170,15 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 			val_i, val_row = vals_iterrows
 			# If the value is a scalar:
 			if qry_row.table in [self.Parameter_table, self.VGP_Value_Double_table]:
-				self.db.update_values(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
+				self.update_values(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, [val_row.val])
 			# If the value is a function:
 			elif qry_row.table == self.VGP_Value_FunctionD_table:
 				# If a function value has a single input
 				if not hasattr(val_row.val, "__len__") and val_row.sect_perc == None:
 					val_row.val = [val_row.val]*2
 					val_row.sect_perc = [0, 1]
-				self.db.update_values(qry_row.table, qry_row.id_col, qry_row.sect_perc_col, qry_row.id, val_row.sect_perc)
-				self.db.update_values(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
+				self.update_values(qry_row.table, qry_row.id_col, qry_row.sect_perc_col, qry_row.id, val_row.sect_perc)
+				self.update_values(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
 			else:
 				raise ValueError('Wrong datatype provided')
 
@@ -213,18 +186,18 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 	# Get all the query data that have to be scaled (without passing through adrresses)
 	def get_to_scale_qry_data(self):
 		# Get Parameter addresses, composing parameter name and curve type
-		par_addr_part2 = self.db.get_whole_column(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'name_col'])
-		par_curve_ids = self.db.get_whole_column(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'curve_id_col'])
-		curve_ids = self.db.get_whole_column(self.Curve_table, self.table_col.loc[self.Curve_table, 'curve_id_col'])
-		par_addr_part1 = self.db.get_values([self.Curve_table], [self.table_col.loc[self.Curve_table, 'curve_id_col']], [self.table_col.loc[self.Curve_table, 'curve_type_col']], par_curve_ids)
+		par_addr_part2 = self.get_whole_column(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'name_col'])
+		par_curve_ids = self.get_whole_column(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'curve_id_col'])
+		curve_ids = self.get_whole_column(self.Curve_table, self.table_col.loc[self.Curve_table, 'curve_id_col'])
+		par_addr_part1 = self.get_values_multi_ids([self.Curve_table], [self.table_col.loc[self.Curve_table, 'curve_id_col']], [self.table_col.loc[self.Curve_table, 'curve_type_col']], par_curve_ids)
 		par_addr = pd.Series(par_addr_part1).str.cat(par_addr_part2, sep = '@').to_list()
 		# Get Parameter dtypes and ids
 		par_dtypes = [self.Parameter_table for i in par_addr]
-		par_ids = self.db.get_whole_column(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'id_col'])
+		par_ids = self.get_whole_column(self.Parameter_table, self.table_col.loc[self.Parameter_table, 'id_col'])
 		# Get VGP_Values addresses, dtypes and ids
-		val_addr = self.db.get_whole_column(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col']) # array(['val1', 'val2', ...])
-		val_dtypes = self.db.get_whole_column(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'datatype_col'])
-		val_ids = self.db.get_whole_column(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'id_col'])
+		val_addr = self.get_whole_column(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col']) # array(['val1', 'val2', ...])
+		val_dtypes = self.get_whole_column(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'datatype_col'])
+		val_ids = self.get_whole_column(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'id_col'])
 		# Concatenate lists
 		addresses = par_addr + val_addr
 		dtypes = par_dtypes + val_dtypes
@@ -236,7 +209,7 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 			# Check if the values belong to one of the three types, if the address is not among the input values and if the value is actually used in the program
 			#T.B.N. not all the addresses in VGP_Data are actually used in the program!!!
 			if dtype in [self.Parameter_table, self.VGP_Value_Double_table, self.VGP_Value_FunctionD_table] and addr not in common.Variables.data['val_addr'].tolist()\
-			and id_ in self.db.db_get_whole_column(dtype, self.table_col.loc[dtype, 'id_col']): # T.B.N. not all the addresses in VGP_Data table are actually used in the program
+			and id_ in self.get_whole_column(dtype, self.table_col.loc[dtype, 'id_col']): # T.B.N. not all the addresses in VGP_Data table are actually used in the program
 				#print({'val_addr' : addr, 'table' : dtype, 'id_col' : self.table_col.loc[dtype, 'id_col'], 'sect_perc_col' : self.table_col.loc[dtype, 'sect_perc_col'],\
 					  #'val_col' : self.table_col.loc[dtype, 'val_col'],'id' : id_})
 				res = res.append({'val_addr' : addr, 'table' : dtype, 'id_col' : self.table_col.loc[dtype, 'id_col'], 'sect_perc_col' : self.table_col.loc[dtype, 'sect_perc_col'],\
@@ -246,12 +219,13 @@ class VgpProg(Program): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRA
 		return res # DataFrame(['val_addr', 'table', 'id_col', 'sect_perc_col', 'val_col', 'id'])
 
 
-	def scale_values(self):
+	def scale_prog_values(self):
 		to_scale_qry_data = self.get_to_scale_qry_data()
 		up_prog = prog_select(common.Variables.up_prog_filename)
 		low_prog = prog_select(common.Variables.low_prog_filename)
-		up_to_scale_vals = up_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
-		low_to_scale_vals = low_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
+		with up_prog, low_prog:
+			up_to_scale_vals = up_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
+			low_to_scale_vals = low_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
 		# Data scaling
 		scaled_vals = up_to_scale_vals*(1 - ((common.Variables.up_diam - common.Variables.diam) / (common.Variables.up_diam - common.Variables.low_diam))) +\
 					  low_to_scale_vals*(1 - ((common.Variables.diam - common.Variables.low_diam) / (common.Variables.up_diam - common.Variables.low_diam)))

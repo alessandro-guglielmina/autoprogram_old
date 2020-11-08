@@ -2,13 +2,12 @@ from pathlib import Path
 import glob
 import os
 import time
-from itertools import compress
 import sqlite3
 import numpy as np
 import pandas as pd
 import shutil
+from itertools import compress
 
-from autoprogram import settings
 from autoprogram import common
 from autoprogram import uimodule as ui
 from autoprogram import wbmodule as wbm
@@ -50,34 +49,41 @@ class Initialize(Position):
 	follow_pos = 'insert_parameters'
 
 	@classmethod
-	def activate(cls): #()
-		cls.insert_preliminary_data()
-		cls.get_fam_prog_list()
-		cls.get_tool_type()
-		cls.get_val_addr()
-		cls.get_common_data()
-		return cls.select_position()
+	def activate(cls):
+		try:
+			cls.insert_preliminary_data()
+			cls.get_fam_dependent_vars()
+			cls.get_tool_type()
+			cls.get_val_addr()
+			cls.get_common_data()
+			return cls.select_position()
+		except Exception as e:
+			print(e)
+			return cls.current_pos
 
 	# Get the family names from the family directories inside the master programs directory
 	@classmethod
 	def get_fam_names(cls):
-		return [str(fam_dir.name) for fam_dir in settings.master_progs_dir.iterdir() if fam_dir.is_dir()]
+		return [str(fam_dir.name) for fam_dir in common.Variables.master_progs_dir.iterdir() if fam_dir.is_dir()]
 
 	# Get the family name from user
 	@classmethod
 	def insert_preliminary_data(cls):
 		# Acquire tool name
 		# common.Variables.tool_name = input('Insert tool name:\n>')
+		common.Variables.tool_name = 'res_prog'
 		# Create array containing all family names (string format)
 		fam_name_list = cls.get_fam_names() # ['fam1', 'fam2', ...]
 		# Select family
 		ui.select_family(fam_name_list)
 
+	# Get common data dependent on the chosen family
 	@classmethod
-	def get_fam_prog_list(cls):
-		fam_prog_dir = Path(settings.master_progs_dir/common.Variables.fam_name)
-		common.Variables.fam_prog_list = list(fam_prog_dir.glob('*' + settings.vgp_suffix))
-		common.Variables.file_suffix = common.Variables.fam_prog_list[0].suffix
+	def get_fam_dependent_vars(cls):
+		fam_prog_dir = Path(common.Variables.master_progs_dir/common.Variables.fam_name)
+		common.Variables.fam_prog_list = list(fam_prog_dir.glob('*' + common.Variables.vgp_suffix))
+		common.Variables.config_vals_wb =  wbm.WorkBook(Path(fam_prog_dir/common.Variables.config_vals_wb_filename))
+		common.Variables.cutting_params_wb_path = wbm.WorkBook(Path(fam_prog_dir/common.Variables.cutting_params_wb_filename))
 
 	# Get the tool type from the family name (which must contain the tool type, e.g. 'drill', 'mill', ...)
 	@classmethod
@@ -92,28 +98,27 @@ class Initialize(Position):
 			raise ValueError('No such a tool type.')
 		ui.print_tool_type()
 
-	# Get the common data needed in the following steps
+	# Get the common data needed in the following steps (val_name, rel, val_addr, val_descr, sect_perc, val)
 	@classmethod
 	def get_common_data(cls):
-		common.Variables.data = common.Variables.input_values_wb.get_common_data(common.Variables.fam_name)
+		common.Variables.data = wbm.get_common_data()
 
 	# Initialize the names of some features, depending on the tool type
 	@classmethod
 	def get_val_addr(cls):
+
 		# Update diam and flute names depending on file suffix and tool type
-		if common.Variables.file_suffix == settings.vgp_suffix:
-			if common.Variables.tool_type == 'drill':
-				common.Variables.diam_addr = settings.drill_diam_addr
-				common.Variables.flute_len_addr = settings.drill_flute_len_addr
-				# common.Variables.point_ang_addr = settings.drill_point_ang_addr
-				# common.Variables.first_spg_addr = settings.drill_first_spg_addr
-				# common.Variables.meas_dist_addr = settings.drill_meas_dist_addr
-			elif common.Variables.tool_type == 'mill':
-				pass
-			else:
-				raise ValueError('No such a tool type.')
+		if common.Variables.tool_type == 'drill':
+
+			common.Variables.diam_addr = common.Variables.drill_diam_addr
+
+		elif common.Variables.tool_type == 'mill':
+
+			pass
+
 		else:
-			raise ValueError('No such a file suffix.')
+
+			raise ValueError('No such a tool type.')
 
 
 # This is the program phase in which the user defines the geometrical parameter of the tool
@@ -126,7 +131,7 @@ class InsertParameters(Position):
 	@classmethod
 	def activate(cls):
 		cls.insert_parameter_values()
-		cls.update_diam_flute_len()
+		cls.update_diam_val()
 		return cls.select_position()
 
 	# Write user inputs in the value column
@@ -141,20 +146,16 @@ class InsertParameters(Position):
 		# Get user input
 		print('Insert parameters:\n')
 		inp_vals = ui.user_input(cast = float, print_list = print_list)
-		# Input values have no relation, this feature is used to refence them in common data
+		# Input values have no relation, this feature is used to reference them among common data
 		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = inp_vals # isnull() needed to reference None values
 
-	# Record diameter and flute length values in common data (after user inputs)
+	# Save the diameter value in a common variable in order to be easily accessed while choosing the master program
 	@classmethod
-	def update_diam_flute_len(cls):
+	def update_diam_val(cls):
 		common.Variables.diam = common.Variables.data.loc[common.Variables.data.val_addr == common.Variables.diam_addr, 'val'].values[0] # dereference all values with .values as ndarray and then with [0]
-		common.Variables.flute_len = common.Variables.data.loc[common.Variables.data.val_addr == common.Variables.flute_len_addr, 'val'].values[0]
 
 
-
-
-
-# This is the program phase in which the user defines the geometrical parameter of the tool
+# This is the program phase in which the program makes computation to get the result program
 class CreateProgram(Position):
 
 	prev_pos = 'insert_parameters'
@@ -169,32 +170,24 @@ class CreateProgram(Position):
 		cls.apply_relations()
 		return cls.select_position()
 
+	# In this step the rogram chooses the master program, i.e. the one having the closest diameter
 	@classmethod
 	def select_master_prog(cls):
 		diam = common.Variables.diam
-		flute_len = common.Variables.flute_len
-		flute_len_xd = flute_len / diam
 		diam_arr = np.empty((1, 0), dtype = float)
-		flute_len_xd_arr = np.empty((1, 0), dtype = float)
 		fam_progs = common.Variables.fam_prog_list
 		for i in fam_progs:
-			#print('select_master_prog')
 			prog_path_i = Path(i)
-			prog_i = pm.prog_select(prog_path_i)# T.B.N. no dependency with respect to the file type, .vgp only!!!
-			diam_i = prog_i.get_values_from_addr([common.Variables.diam_addr]).val.values[0] # float, DataFrame.val.values is a 1-sized numpy array
-			flute_len_i = prog_i.get_values_from_addr([common.Variables.flute_len_addr]).val.values[0]
-			flute_len_xd_i = flute_len_i / diam_i
+			# Open a context manager with the db composition of prog_i+ to open a connection with the vgp program (database)
+			with  pm.prog_select(prog_path_i) as prog_i:
+				diam_i = prog_i.get_values_from_addr([common.Variables.diam_addr]).val.values[0] # float, DataFrame.val.values is a 1-sized numpy array
 			diam_arr = np.append(diam_arr, diam_i)
-			flute_len_xd_arr = np.append(flute_len_xd_arr, flute_len_xd_i)
 		# Data to be sorted
-		#diam assigned
 		delta_diam = diam_arr - diam
-		delta_flute_len_xd = flute_len_xd_arr - flute_len_xd
 		#fam_progs already assigned 
 		data = pd.DataFrame({
 							'diam': pd.Series(diam_arr, dtype= 'float'),
 							'delta_diam': pd.Series(delta_diam, dtype= 'float'),
-							'delta_flute_len_xd': pd.Series(delta_flute_len_xd, dtype= 'float'),
 							'fam_progs': pd.Series(fam_progs, dtype= 'str')
 							})
 		# Separate positive and negative delta diameters data in two different DataFrames
@@ -203,17 +196,17 @@ class CreateProgram(Position):
 		# Absolute value of delta diameters (in-place operation)
 		np.absolute(up.delta_diam.values, out = up.delta_diam.values)
 		np.absolute(low.delta_diam.values, out = low.delta_diam.values)
-		# If there isn't neither an up program or a low program an error message is raised
+		# If there isn't the upper program or the lower one, an error message is raised
 		if up.delta_diam.values.size == 0 or low.delta_diam.values.size == 0:
 			raise ValueError("No master programs for the selected diameter")
 		else:
 			pass
-		# Sort data by delta flute length xd and then by delta diameter, thus with the same delta diameter, the first element is the one with the lower delta flute length xd 
-		up.sort_values(by = ['delta_diam', 'delta_flute_len_xd'], inplace = True, ignore_index = True) # change directly itself without producing a copy
-		low.sort_values(by = ['delta_diam', 'delta_flute_len_xd'], inplace = True, ignore_index = True)
-		# Get up and low program filenames and diameters
-		common.Variables.up_prog_filename = up.fam_progs[0]
-		common.Variables.low_prog_filename = low.fam_progs[0]
+		# Sort data by delta diameter
+		up.sort_values(by = ['delta_diam'], inplace = True, ignore_index = True) # change directly itself without producing a copy
+		low.sort_values(by = ['delta_diam'], inplace = True, ignore_index = True)
+		# Get upper and lower program filenames and diameters
+		common.Variables.up_prog_filename = Path(up.fam_progs[0])
+		common.Variables.low_prog_filename = Path(low.fam_progs[0])
 		common.Variables.up_diam = up.diam[0]
 		common.Variables.low_diam = low.diam[0]
 		# Get the master program filename, i.e. the one having the closest diameter among up and low programs
@@ -221,21 +214,22 @@ class CreateProgram(Position):
 		poss_master_progs.sort_values(by = 'delta_diam', inplace = True, ignore_index = True)
 		master_prog_filename = poss_master_progs.fam_progs[0]
 		# Generate target program filename
-		partial_prog_filename = common.res_prog_dir.joinpath(common.Variables.tool_name)
-		common.Variables.prog_filename = partial_prog_filename.with_suffix(common.Variables.file_suffix)
+		partial_res_prog_filename = common.Variables.res_prog_dir.joinpath(common.Variables.tool_name)
+		common.Variables.res_prog_filename = partial_res_prog_filename.with_suffix(common.Variables.vgp_suffix)
 		# Copy the master program with the target program name (create the target program)
-		shutil.copy2(master_prog_filename, common.Variables.prog_filename)
-		# Instantiate the target program object
-		common.Variables.prog = pm.prog_select(common.Variables.prog_filename)
+		shutil.copyfile(master_prog_filename, common.Variables.res_prog_filename)
+		# Instantiate the result program object
+		common.Variables.res_prog = pm.prog_select(common.Variables.res_prog_filename)
 
 	@classmethod
 	def scale_values(cls):
-		#print('scale_values')
-		common.Variables.prog.prog_scale_values()
+		with common.Variables.res_prog as res_prog:
+			 res_prog.scale_prog_values()
 
 	@classmethod
 	def update_input_values(cls):
-		common.Variables.prog.prog_update_input_values()
+		with common.Variables.res_prog as res_prog:
+			 res_prog.update_input_values()
 
 	@classmethod	
 	def apply_relations(self):
@@ -278,7 +272,7 @@ class Machine(object):
 
 	@classmethod
 	def run(cls):
-		print(settings.copyright_header)
+		print(common.Variables.copyright_header)
 		current_position = cls.go_to_position(cls.first_position_name) # start position
 		while current_position != cls.go_to_position(cls.last_position_name):
 			next_position_name = current_position.activate() # return position name chosen in the position, and acquire user input while running (if any)
