@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import shutil
 from itertools import compress
+import re
 
 from autoprogram import common
 from autoprogram import uimodule as ui
@@ -27,19 +28,6 @@ class Position(object):
 		print("The activate method isn't initialized in this is-a-position class.")
 		sys.exit(1)
 
-	@classmethod
-	def select_position(cls):
-		ch_list = ['confirm', 'repeat', 'move back']
-		ch_ids = ['C', 'R', 'B']
-		ch = ui.user_input(ch_list = ch_list, ch_ids = ch_ids)
-		pos_select = ch[0]
-		if (pos_select == 'confirm'):
-			next_pos = cls.follow_pos
-		elif (pos_select == 'repeat'):
-			next_pos = cls.current_pos
-		elif (pos_select == 'move back'):
-			next_pos = cls.prev_pos
-		return next_pos
 
 # This is the first program step in which the information carrier is initialized with the familiy name (provided by the user)
 class Initialize(Position):
@@ -56,7 +44,7 @@ class Initialize(Position):
 			cls.get_tool_type()
 			cls.get_val_addr()
 			cls.get_common_data()
-			return cls.select_position()
+			return ui.select_position(cls)
 		except Exception as e:
 			print(e)
 			return cls.current_pos
@@ -83,7 +71,7 @@ class Initialize(Position):
 		fam_prog_dir = Path(common.Variables.master_progs_dir/common.Variables.fam_name)
 		common.Variables.fam_prog_list = list(fam_prog_dir.glob('*' + common.Variables.vgp_suffix))
 		common.Variables.config_vals_wb =  wbm.WorkBook(Path(fam_prog_dir/common.Variables.config_vals_wb_filename))
-		common.Variables.cutting_params_wb_path = wbm.WorkBook(Path(fam_prog_dir/common.Variables.cutting_params_wb_filename))
+		common.Variables.funct_vals_wb_path = wbm.WorkBook(Path(fam_prog_dir/common.Variables.funct_vals_wb_filename))
 
 	# Get the tool type from the family name (which must contain the tool type, e.g. 'drill', 'mill', ...)
 	@classmethod
@@ -130,9 +118,13 @@ class InsertParameters(Position):
 
 	@classmethod
 	def activate(cls):
-		cls.insert_parameter_values()
-		cls.update_diam_val()
-		return cls.select_position()
+		try:
+			cls.insert_parameter_values()
+			cls.update_diam_val()
+			return ui.select_position(cls)
+		except Exception as e:
+			print(e)
+		return cls.current_pos
 
 	# Write user inputs in the value column
 	@classmethod
@@ -147,7 +139,7 @@ class InsertParameters(Position):
 		print('Insert parameters:\n')
 		inp_vals = ui.user_input(cast = float, print_list = print_list)
 		# Input values have no relation, this feature is used to reference them among common data
-		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = inp_vals # isnull() needed to reference None values
+		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = inp_vals # write user input values in common.Variables.data (isnull() needed to reference None values)
 
 	# Save the diameter value in a common variable in order to be easily accessed while choosing the master program
 	@classmethod
@@ -168,7 +160,8 @@ class CreateProgram(Position):
 		cls.scale_values()
 		cls.update_input_values()
 		cls.apply_relations()
-		return cls.select_position()
+		return ui.select_position(cls)
+
 
 	# In this step the rogram chooses the master program, i.e. the one having the closest diameter
 	@classmethod
@@ -235,10 +228,27 @@ class CreateProgram(Position):
 	def apply_relations(self):
 		#print('apply_relations')
 		for i, row in common.Variables.data.iterrows(): # row is the pd.Series corresponding to a specific row
-			if row.rel is not None:
-				common.relations.select[row.rel](common.relations, [row.val_name], [row.rel_args], [row.val_addr]) # (self, [val_name], [row.rel_args], [row.val_addr])
-				# val_name is passed in case of data update mode (when the returned value is kept into data without beeing updated in the program; the val_name is needed to address
-				# the value into data)
+			if row.rel is not None: # row.rel is a string
+				arg_names = re.findall(r'\$(.*?)\$', row.rel) # get a list with all the arg names (strings between $$)
+				for arg_name in arg_names:
+					try:
+						arg_val = common.Variables.data.val[common.Variables.data.val_name == arg_name][0] # get the argument values (only from common.Variables.data)
+					except IndexError:
+						raise ValueError(f'No such a value among the configuration values: {arg_name}.')
+					rel_exp = re.sub(r'\${}\$'.format(arg_name), str(arg_val), row.rel) # substitute the val name in the expression with its value
+				local_dict = {}
+				try:
+					exec(rel_exp, globals(), local_dict)
+				except SyntaxError:
+					raise ValueError('Wrong syntax in the configuration values.')
+				val = local_dict['val']
+				row.val = val
+				print(common.Variables.data.val[1])
+				input('finish')
+					# row.val = eval(rel_exp) # write the evalued expression in common.Variables.data.val (row.val is a reference to common.Variables.data.val[i])
+				# common.relations.select[row.rel](common.relations, [row.val_name], [row.rel_args], [row.val_addr]) # (self, [val_name], [row.rel_args], [row.val_addr])
+				# # val_name is passed in case of data update mode (when the returned value is kept into data without beeing updated in the program; the val_name is needed to address
+				# # the value into data)
 			else:
 				pass
 

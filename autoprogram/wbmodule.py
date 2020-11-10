@@ -64,10 +64,10 @@ def get_common_data():
 	# Get val_addr and val_descr from the values database workbook
 	values_database_sheet = common.Variables.values_database_wb.wb # DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
 	try:
-		config_val_addr = values_database_sheet.val_addr[values_database_sheet.val_name.isin(config_val_names)].to_numpy()
-		config_val_addr[pd.isnull(config_val_addr)] = None # pd.isnull needed to address nan values
-		config_val_descr = values_database_sheet.val_descr[values_database_sheet.val_name.isin(config_val_names)].to_numpy()
-		config_val_descr[pd.isnull(config_val_descr)] = None # pd.isnull needed to address nan values
+		config_val_addr = values_database_sheet.val_addr[values_database_sheet.val_name.isin(config_val_names)].to_numpy() # take the addresses corresponding to the val names in the config workbook
+		config_val_addr[pd.isnull(config_val_addr)] = None # set nan values to None (pd.isnull needed to address nan values)
+		config_val_descr = values_database_sheet.val_descr[values_database_sheet.val_name.isin(config_val_names)].to_numpy() # take the descriptions corresponding to the val names in the config workbook
+		config_val_descr[pd.isnull(config_val_descr)] = None #  set nan values to None (pd.isnull needed to address nan values)
 	except KeyError:
 		raise ValueError(f"Some values are missing from the values database sheet.")
 	# Sect-percs and vals are set to None
@@ -82,5 +82,5 @@ def get_common_data():
 		             		'val': pd.Series(config_vals, dtype='object')
 		             		})
 	if not common.Variables.diam_addr in res.val_addr.tolist():
-		raise ValueError('Diameter value missing.')
+		raise ValueError('Diameter value missing among the configuration values.')
 	return res # DataFrame('val_addr', 'val_type', 'val_descr')

@@ -60,7 +60,7 @@ class DataBase(object):
 		return res # array([val1, val2, ...])
 
 	# Update values array from single id
-	def update_values(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
+	def update_values_single_id(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
 		rowids = self.get_rowids(table, id_col, id_)
 		if hasattr(val, "__len__") and len(val) != len(rowids):
 			raise ValueError('Wrong number of input values.')

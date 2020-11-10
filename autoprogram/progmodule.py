@@ -170,15 +170,15 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 			val_i, val_row = vals_iterrows
 			# If the value is a scalar:
 			if qry_row.table in [self.Parameter_table, self.VGP_Value_Double_table]:
-				self.update_values(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, [val_row.val])
+				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, [val_row.val])
 			# If the value is a function:
 			elif qry_row.table == self.VGP_Value_FunctionD_table:
 				# If a function value has a single input
 				if not hasattr(val_row.val, "__len__") and val_row.sect_perc == None:
 					val_row.val = [val_row.val]*2
 					val_row.sect_perc = [0, 1]
-				self.update_values(qry_row.table, qry_row.id_col, qry_row.sect_perc_col, qry_row.id, val_row.sect_perc)
-				self.update_values(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
+				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.sect_perc_col, qry_row.id, val_row.sect_perc)
+				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
 			else:
 				raise ValueError('Wrong datatype provided')
 

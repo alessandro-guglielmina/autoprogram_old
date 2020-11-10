@@ -16,9 +16,8 @@ class Variables(object):
 	res_prog_dir = Path.home().joinpath(settings.res_prog_dir)
 	values_database_wb = wbm.WorkBook(Path(master_progs_dir / settings.values_database_wb_filename))
 	config_vals_wb_filename = settings.config_vals_wb_filename
-	cutting_params_wb_filename = settings.cutting_params_wb_filename
+	funct_vals_wb_filename = settings.funct_vals_wb_filename
 	vgp_suffix = settings.vgp_suffix
-
 	drill_diam_addr = settings.drill_diam_addr
 
 	# tool_name = None
