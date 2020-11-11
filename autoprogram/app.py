@@ -333,7 +333,7 @@ class CreateProgram(Position):
 				with common.Variables.res_prog as res_prog:
 
 					arg_vals = res_prog.get_values_from_names(arg_names) # return a DataFrame whose colimns are sect_perc and val of the values substituted in the relation
-					
+
 					arg_vals = arg_vals.val.to_list() # take only the val (that are np.arrays)
 
 					arg_vals = [i[0] for i in arg_vals] # dereference the arrays, take only the value inside them
@@ -390,7 +390,16 @@ class CreateProgram(Position):
 
 		for funct_val_sheet in funct_vals_sheets:
 
-			pass
+			funct_arg_name = funct_val_sheet.columns[0]
+
+			with common.Variables.res_prog as res_prog:
+
+				funct_arg_val = res_prog.get_values_from_names(funct_arg_name)
+
+			diff = funct_val_sheet[funct_arg_name].sub(funct_arg_val)
+			idx = diff[diff < 0].idxmin
+			print(idx)
+			input('ciao')
 
 
 
