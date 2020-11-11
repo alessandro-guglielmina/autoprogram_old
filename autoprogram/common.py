@@ -12,12 +12,25 @@ from autoprogram import wbmodule as wbm
 class Variables(object):
 
 	copyright_header = settings.copyright_header
+
 	master_progs_dir = Path(settings.master_progs_dir)
+
 	res_prog_dir = Path.home().joinpath(settings.res_prog_dir)
+
 	values_database_wb = wbm.WorkBook(Path(master_progs_dir / settings.values_database_wb_filename))
-	config_vals_wb_filename = settings.config_vals_wb_filename
-	funct_vals_wb_filename = settings.funct_vals_wb_filename
+
+	values_database_sh = list(values_database_wb.wb.values())[0] # first wb sheet selection, it's a DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
+
+	config_file_wb_filename = settings.config_file_wb_filename
+
+	config_vals_sh_name = settings.config_vals_sh_name
+
+	funct_vals_1_sh_name = settings.funct_vals_1_sh_name
+	
+	funct_vals_2_sh_name = settings.funct_vals_2_sh_name
+
 	vgp_suffix = settings.vgp_suffix
+
 	drill_diam_addr = settings.drill_diam_addr
 
 	# tool_name = None

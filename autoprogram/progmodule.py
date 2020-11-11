@@ -9,19 +9,29 @@ from autoprogram import dbmodule as dbm
 
 # Function allowing to choose the correct object depending on the file extension
 def prog_select(path):
+
 	if path.suffix == common.Variables.vgp_suffix:
+
 		res = VgpProg(path)
+
 		return res
+
 	else:
+
 		print('Unknown file type.')
 
 
 # Returns if a value can be cast as float or not
 def is_float(val):
+
 	try:
+
 		float(val)
+
 		return True
+
 	except ValueError:
+
 		return False
 
 
@@ -31,13 +41,19 @@ is_numeric = lambda x: any(list(map(is_float, x)))
 class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRAM" AS PARENT OBJECT. "PROGRAM" IS INHERITED BY ANCA_PROG TOO
 	
 	def __init__(self, path):
+
 		super().__init__(path)
 
-	Curve_table = 'Curve' 
+	Curve_table = 'Curve'
+
 	Parameter_table = 'Parameter'
+
 	VGP_Data_table = 'VGP_Data'
+
 	VGP_Value_Double_table = 'VGP_Value_Double'
+
 	VGP_Value_FunctionD_table = 'VGP_Value_FunctionD'
+
 	table_col_dict = {
 						'id_col' : {Parameter_table : 'PA_Id', VGP_Data_table : 'ID', VGP_Value_Double_table : 'D_Id', VGP_Value_FunctionD_table : 'D_Id', Curve_table : None},
 						'sect_perc_col' : {Parameter_table : None, VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : 'D_Parameter', Curve_table : None},
@@ -48,16 +64,17 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 						'curve_id_col' : {Parameter_table : 'PA_CurveId', VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table  : 'CU_Id'},
 						'curve_type_col' : {Parameter_table : None, VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table  : 'CU_Type'},
 					 }
+
 	table_col = pd.DataFrame(table_col_dict)
 
 	# Get the Parameter id from the parameter name (and curve type, because more parameters have the same name, but only one parameter per curve type)
 	def get_param_id_from_addr(self, addr): # (self, row.addr)
-		addr = addr.split('-') # split the address in parameter type and parameter name
 		try:
+			addr = addr.split('-') # split the address in parameter type and parameter name
 			curve_type = addr[0]
 			param_name = addr[1]
 		except IndexError:
-			raise ValueError('Wrong Parameter address.')
+			raise ValueError(f'Wrong Parameter address or value name not present in the program: {addr}.')
 		# Get the possible curve ids from Curve table
 		poss_curve_ids = self.get_values_single_id(self.Curve_table, self.table_col.loc[self.Curve_table, 'curve_type_col'],\
 						 self.table_col.loc[self.Curve_table, 'curve_id_col'], curve_type) # [poss_cu_id1, poss_cu_id2, ...]
@@ -79,11 +96,7 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 	
 	# vgp_get_dtype_n_id() auxiliary function
 	def get_dtype_n_id_from_single_addr(self, addr): #(self, 'val_address')
-		# if addr == None:
-		# 	raise ValueError('None address not valid.')
-		# else:
-		# 	pass
-		# If the address is not in VGP_Data, it means that it's a Parameter
+
 		try:
 			dtype = self.get_values_single_id(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col'], self.table_col.loc[self.VGP_Data_table, 'datatype_col'], addr)
 			id_ = self.get_values_single_id(self.VGP_Data_table, self.table_col.loc[self.VGP_Data_table, 'val_addr_col'], self.table_col.loc[self.VGP_Data_table,'id_col'], addr)
@@ -97,10 +110,15 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 
 	# Returm the data type and the id corresponding to a certain address array for data types VGP_Value_Double, VGP_Value_Int, VGP_Value_String, ... (not Parameter)
 	def get_dtypes_n_ids(self, addr): #(self, array(['val_addr1', 'val_addr2', ...]))
+
 		res = np.empty((0,2))
+
 		for i in addr:
+
 			dtype_n_id_i = self.get_dtype_n_id_from_single_addr(i)
+
 			res = np.append(res, dtype_n_id_i, axis = 0)
+
 		return res # array([['table1', 'id1'], ['table2', 'id2'], ...])
 
 
@@ -151,9 +169,30 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 		return res  # DataFrame(['sect_perc', 'val'])
 
 
-	def get_values_from_addr(self, param_addr): # (self, list(['par_name1', 'par_name2', ...]))
+	def get_values_from_addr(self, param_addr): # (self, list(['par_addr1', 'par_addr2', ...]))
+
 		# Get query data from addresses
 		qry_data = self.get_qry_data_from_addr(param_addr)
+
+		return self.get_values_from_qry_data(qry_data) # DataFrame(['sect_perc', 'val'])
+
+
+	def get_values_from_names(self, param_names): # (self, list(['par_name1', 'par_name2', ...]))
+
+		param_addr = []
+
+		for param_name in param_names:
+
+			# return a 1-sized pd.Series object with the address corresponding to the name
+			param_addr_i = common.Variables.values_database_sh.val_addr[common.Variables.values_database_sh.val_name == param_name]
+
+			# return the string value of the address
+			param_addr_i = param_addr_i.iloc[0]
+
+			param_addr.append(param_addr_i)
+
+		qry_data = self.get_qry_data_from_addr(param_addr)
+
 		return self.get_values_from_qry_data(qry_data) # DataFrame(['sect_perc', 'val'])
 
 
@@ -170,7 +209,7 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 			val_i, val_row = vals_iterrows
 			# If the value is a scalar:
 			if qry_row.table in [self.Parameter_table, self.VGP_Value_Double_table]:
-				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, [val_row.val])
+				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
 			# If the value is a function:
 			elif qry_row.table == self.VGP_Value_FunctionD_table:
 				# If a function value has a single input
