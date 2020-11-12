@@ -33,6 +33,8 @@ class Variables(object):
 
 	drill_diam_addr = settings.drill_diam_addr
 
+	separator = settings.separator
+
 	# tool_name = None
 	# fam_name = None
 	# fam_prog_dir = None

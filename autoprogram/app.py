@@ -374,7 +374,7 @@ class CreateProgram(Position):
 
 			funct_vals_sheets.append(funct_vals_1_sh)
 
-		except IndexError:
+		except KeyError:
 
 			raise ValueError('First function values sheet missing.') # the first function values sheet is mandatory
 
@@ -384,23 +384,45 @@ class CreateProgram(Position):
 
 			funct_vals_sheets.append(funct_vals_2_sh)
 
-		except IndexError:
+		except KeyError:
 
 			pass # the second function values sheet is not mandatory
 
 		for funct_val_sheet in funct_vals_sheets:
 
-			funct_arg_name = funct_val_sheet.columns[0]
+			funct_arg_name = funct_val_sheet.columns[0] # takes the first column heading, i.e. the function argument (most times the tool diameter)
 
-			with common.Variables.res_prog as res_prog:
+			with common.Variables.res_prog as res_prog: # context manager opening the program
 
-				funct_arg_val = res_prog.get_values_from_names(funct_arg_name)
+				funct_arg_val = res_prog.get_values_from_names([funct_arg_name]).val[0][0] # take function argument value (i.e. the val component)
 
-			diff = funct_val_sheet[funct_arg_name].sub(funct_arg_val)
-			idx = diff[diff < 0].idxmin
-			print(idx)
-			input('ciao')
+				diff = funct_val_sheet[funct_arg_name].astype(float).sub(funct_arg_val) # config file argument values - actual program value
 
+				idx = diff[diff < 0].idxmax() # take the index of the gratest smaller argument value in the config file argument column
+
+				funct_val_names = funct_val_sheet.columns[1:] # take all the headings but the first one (that is the argument value)
+
+				funct_val_names = [i for i in funct_val_names if not ('UNNAMED' in i.upper() or 'WHEEL' in i.upper())] # takes only the actual result values headings, not the assigned wheels and the empty coluns (whose heading is imported as 'unnamed...')
+
+				columns = ['sect_perc', 'val']
+
+				comp_funct_vals = pd.DataFrame(columns = columns, dtype = object) # complete function values (just to be updated in the program)
+
+				for funct_val_name in funct_val_names:
+
+					raw_funct_val = funct_val_sheet.loc[idx, funct_val_name] # take the raw text value from the spreadsheet
+
+					try:
+
+						funct_val = np.array(raw_funct_val.split(common.Variables.separator)).astype(float) # array of floats from the spreadsheet
+
+					except ValueError:
+
+						raise ValueError(f'Wrong function value format in the function values sheet: column {funct_val_name}, row {idx}') # if there is some format error, raise a ValueError
+
+					comp_funct_vals = comp_funct_vals.append({'sect_perc' : None, 'val' : funct_val}, ignore_index = True)
+
+				res_prog.update_values_from_names(funct_val_names, comp_funct_vals)
 
 
 # End phase

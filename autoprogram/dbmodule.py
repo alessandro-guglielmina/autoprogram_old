@@ -88,7 +88,7 @@ class DataBase(object):
 
 	# Update values array from single id
 	def update_values_single_id(self, table, id_col, val_col, id_, val): #(self, 'table', 'id_col', 'val_col', 'id', [val1, val2, ...])
-
+	
 		rowids = self.get_rowids(table, id_col, id_)
 
 		if len(val) != len(rowids):
@@ -187,7 +187,7 @@ class DataBase(object):
 			qry_val = np.hstack((l, m))
 
 			self.curs.execute(qry, qry_val)
-			
+
 			self.conn.commit()
 
 
