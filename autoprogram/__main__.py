@@ -1,5 +1,5 @@
-from autoprogram import app
+from autoprogram import guimodule as guim
 
 if __name__ == '__main__':
 	
-	app.Machine().run()
+	guim.run()
