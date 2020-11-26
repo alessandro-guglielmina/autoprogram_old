@@ -96,9 +96,11 @@ class AutoprogramApp(tk.Tk):
 
 		tk.Tk.wm_title(self, "autoprogram")
 
-		tk.Tk.geometry(self,'400x260')
+		tk.Tk.geometry(self,'500x320')
 
-		# create a menu
+		self.iconbitmap("images/icon.ico")
+
+		# create a menu and its cascades
 		root_menu = tk.Menu(self)
 
 		self.config(menu=root_menu)
@@ -109,61 +111,80 @@ class AutoprogramApp(tk.Tk):
 
 		file_menu.add_command(label="Exit", command=self.quit)
 
-		# declare the container of the child frames, it's a frame inside the root (it's always the same frame because it's the one in the root)
+		# create the container of the child frames, it's a frame inside the root (it's always the same frame because it's the one in the root)
 		container_frame = tk.Frame(self)
 
-		container_frame.pack(side="top", fill="both", expand = True)
+		container_frame.grid(row=1, column=0, columnspan=3, pady=20)
 
-		# container.grid_rowconfigure(0, weight=1)
+		# the following widgets get their features from the specific page
+		# create an heading
+		self.head_label = tk.Label(self, font=LARGE_FONT)
 
-		# container.grid_columnconfigure(0, weight=1)
+		self.head_label.grid(row=0, column=0, columnspan=1)
 
-		# canvas = tk.Canvas(self, width=2000, height=2000)
+		# create a label for messages
+		self.comm_label = tk.Label(self, text="", width=82, anchor=tk.W)
 
-		# canvas.place(x=-100, y=220)
+		self.comm_label.grid(row=2, column=0, columnspan=4)
 
-		# blackLine = canvas.create_line(0,2,2000,2)
+		# create back button
+		self.back_button = tk.Button(self, text="Back", state=tk.DISABLED, width=10)
 
-		# canvas.configure(background='gray')
+		self.back_button.grid(row=3, column=0, pady=10)
 
-		# canvas_id = canvas.create_text(432,25)
+		#create a confirm button
+		self.confirm_button = tk.Button(self, text="Confirm", width=10) # pass the function as thread in order to prevent the app from freezing
 
-		# canvas.itemconfig(canvas_id, text = "my mail")
+		self.confirm_button.grid(row=3, column=1, pady=10)
 
-		# canvas.insert(canvas_id, 12, "")
-
+		# create a dictionary with all the page objects (istantiations of respective classes)
 		self.frames = {}
 
-		# instantiate each frame
-		for F in (InitializePage,):
+		# instantiate first frame
+		initialize_frame = InitializePage(container_frame, self) # F(container_frame, root)
 
-			frame = F(container_frame, self) # F(parent, controller), container = Frame, self = tk.Tk (root)
+		self.config_and_show_frame(initialize_frame)
 
-			self.frames[F] = frame # the class itself is used as the index to select its instan
 
-			frame.grid(row=0, column=0)
-
-		self.show_frame(InitializePage)
-
-	def show_frame(self, cont):
+	def config_and_show_frame(self, page_frame):
 		# this function shows the selected frame (the index arguent is the class itself)
 
-		frame = self.frames[cont]
+		self.head_label.config(text=page_frame.head_text)
 
-		frame.tkraise()
+		self.back_button.config(command=lambda: threading.Thread(target=page_frame.back_function).start(), state=page_frame.back_butt_state)
+
+		self.confirm_button.config(command=lambda: threading.Thread(target=page_frame.confirm_function).start(), state=page_frame.confirm_butt_state)
+
+		page_frame.grid(row=1, column=0, columnspan=2)
+
+		page_frame.tkraise()
 
 
 class InitializePage(tk.Frame):
 
 	def __init__(self, container_frame, root):
 
+		# save the root in object variable
+		self.root = root
+
+		# save the container frame in object variable
+		self.container_frame = container_frame
+
 		# tk.Frame is used instead of super(), as tkinter classes are old
 		tk.Frame.__init__(self, container_frame) # instantiate itself inside the container frame (in the root)
 
-		head_label = tk.Label(self, text="initialization page", font=LARGE_FONT)
+		# save the root in object variable
+		self.root = root
 
-		head_label.grid(row=0, column=0, columnspan=2)
+		# features to be passed to the root template frame
+		self.head_text = "initialization page"
 
+		self.back_butt_state = tk.DISABLED
+
+		self.confirm_butt_state = tk.NORMAL
+
+		# create widgets characteristic of the current page
+		# get a list of all the families
 		fam_names_list = app.Initialize.get_fam_names()
 
 		# get families names from the master program directory
@@ -174,25 +195,20 @@ class InitializePage(tk.Frame):
 
 			self.fam_listbox.insert(i, fam_name)
 
-		self.fam_listbox.grid(row=1, column=0, columnspan=1)
+		self.fam_listbox.grid(row=1, column=0, columnspan=1, padx=20)
 
 		self.tool_name_entry = tk.Entry(self, width=20)
 
 		self.tool_name_entry.insert(0, 'tool name')
 
-		self.tool_name_entry.grid(row=1, column=1, columnspan=1, padx=20)
+		self.tool_name_entry.grid(row=1, column=1, columnspan=1)
 
-		self.comm_label = tk.Label(self, text="")
 
-		self.comm_label.grid(row=2, column=0, columnspan=1)
+	# back_function and confirm_function are to be passed to the back and confirm buttons
+	def back_function(self):
 
-		back_button = tk.Button(self, text="Back", state=tk.DISABLED, width=10)
+		pass
 
-		back_button.grid(row=3, column=0, padx=60, pady=20)
-
-		confirm_button = tk.Button(self, text="Confirm", width=10, command=lambda: threading.Thread(target=self.confirm_function).start()) # pass the function as thread in order to prevent the app from freezing
-
-		confirm_button.grid(row=3, column=1, pady=20)
 
 	def confirm_function(self):
 		"""
@@ -207,13 +223,73 @@ class InitializePage(tk.Frame):
 
 			app.Initialize.get_fam_dependent_vars()
 
-			self.comm_label.config(text="")
+			self.root.comm_label.config(text="")
+
+			self.grid_forget()
+
+			insert_parameters_page = InsertParametersPage(self.container_frame, self.root)
+
+			self.root.config_and_show_frame(insert_parameters_page)
 
 			# root.show_frame(InsertParametersPage)
 
-		except FileNotFoundError:
+		except Exception as e:
 
-			self.comm_label.config(text="Choose a family")
+			self.root.comm_label.config(text=f'{e}')
+
+
+class InsertParametersPage(tk.Frame):
+
+	def __init__(self, container_frame, root):
+
+		# tk.Frame is used instead of super(), as tkinter classes are old
+		tk.Frame.__init__(self, container_frame) # instantiate itself inside the container frame (in the root)
+
+		# save the root in object variable
+		self.root = root
+
+		# features to be passed to the root template frame
+		self.head_text = "input parameters page"
+
+		self.back_butt_state = tk.NORMAL
+
+		self.confirm_butt_state = tk.NORMAL
+
+		# get a list with all the input descriptions, with the sam order of the input values
+		self.descr_list = app.InsertParameters.get_params_descr()
+
+		# get the number of input parameters
+		self.params_num = len(self.descr_list)
+
+		# create a list with all the labels containing input descriptions
+		self.descr_label_list = [tk.Label(self, text=descr, width=20) for descr in self.descr_list]
+
+		# create a list of entries (its length is equal to descr_list)
+		self.entry_list = [tk.Entry(self, width=20) for i in range(params_num)]
+
+		# create an entry box and its description for each input parameters
+		for descr_label, entry, i in zip(self.descr_label_list, self.entry_list, range(params_num)):
+
+			descr_label.grid(row=i, column=0)
+
+			entry.grid(row=i, column=1)
+
+
+	# back_function and confirm_function are to be passed to the back and confirm buttons
+	def back_function(self):
+
+		pass
+
+
+	def confirm_function(self):
+
+		input_vals = []
+
+		for entry in self.entry_list:
+
+			input_vals.append(entry.get())
+		
+		app.InsertParameters.save_input_params(input_vals)
 
 
 def run():

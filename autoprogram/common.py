@@ -8,6 +8,14 @@ import math
 from autoprogram import settings
 from autoprogram import wbmodule as wbm
 
+
+# create a dummy class to instantiate an object with the same feaures of a variable thatwill be assigned later in the program
+class Dummy(object):
+
+	rel = np.array([None])
+
+	val_descr = np.array([None])
+
 # Common variables namespace
 class Variables(object):
 
@@ -34,6 +42,9 @@ class Variables(object):
 	drill_diam_addr = settings.drill_diam_addr
 
 	separator = settings.separator
+
+	# initialize this variables in order to instantiate page classes in gui module, they will be populated lately
+	data = Dummy()
 
 	# tool_name = None
 	# fam_name = None

@@ -115,8 +115,8 @@ class Initialize(Position):
 		common.Variables.data = wbm.get_common_data()
 
 
-# # This is the program phase in which the user defines the geometrical parameter of the tool
-# class InsertParameters(Position):
+# This is the program phase in which the user defines the geometrical parameter of the tool
+class InsertParameters(Position):
 
 # 	prev_pos = 'initialize'
 
@@ -135,30 +135,28 @@ class Initialize(Position):
 # 		return ui.select_position(cls)
 
 
-# 	# Write user inputs in the value column
-# 	@classmethod
-# 	def insert_parameter_values(cls):
+	# get a list with all the input descriptions, with the sam order of the input values
+	@classmethod
+	def get_params_descr(cls):
 
-# 		# Create printing list
-# 		all_rel = common.Variables.data.rel.tolist()
+		# Create printing list
+		all_rel = common.Variables.data.rel.tolist()
 
-# 		all_descr = common.Variables.data.val_descr.tolist()
+		all_descr = common.Variables.data.val_descr.tolist()
 
-# 		inp_vals_filt = [i == None for i in all_rel]
+		inp_vals_filter = [i == None for i in all_rel]
 
-# 		descr_list = list(compress(all_descr, inp_vals_filt)) # use boolean indexing with lists
+		descr_list = list(compress(all_descr, inp_vals_filter)) # use boolean indexing with lists
 
-# 		print_list = [f'Enter {i}: ' for i in descr_list]
+		return descr_list # [descr1, descr2, ...]
 
-# 		# Get user input
-# 		print('Insert parameters:\n')
 
-# 		inp_vals = ui.user_input(cast = float, print_list = print_list)
+	def save_input_params(cls, input_vals): # (cls, [inp_val1, inp_val2, ...])
 
-# 		inp_vals = [[i] for i in inp_vals] # makes all the values lists (iterables)
+		input_vals = [[i] for i in input_vals] # makes all the values lists (iterables)
 
-# 		# Input values have no relation, this feature is used to reference them among common data
-# 		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = inp_vals # write user input values in common.Variables.data (isnull() needed to reference None values)
+		# Input values have no relation, this feature is used to reference them among common data
+		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = input_vals # write user input values in common.Variables.data (isnull() needed to reference None values)
 
 
 # 	# Save the diameter value in a common variable in order to be easily accessed while choosing the master program
