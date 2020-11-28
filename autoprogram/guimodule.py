@@ -85,6 +85,25 @@ from autoprogram import common
 
 LARGE_FONT= ("Verdana", 10)
 
+
+# def confirm_decorator(confirm_function):
+# 	"""
+# 		this decorator is added to any confirm function, in order to print the error (if any) on the communication label
+# 	"""
+
+# 	def wrapper_function(*args, **kwargs):
+
+# 		try:
+
+# 			return confirm_function(*args, **kwargs)
+
+# 		except Exception as e:
+
+# 			args[0].root.comm_label.config(text=f'{e}') # args[0] is self, i.e. the frame object (the page)
+
+# 	return wrapper_function
+
+
 # root class (tk.Tk is the root)
 class AutoprogramApp(tk.Tk):
 
@@ -120,7 +139,7 @@ class AutoprogramApp(tk.Tk):
 		# create an heading
 		self.head_label = tk.Label(self, font=LARGE_FONT)
 
-		self.head_label.grid(row=0, column=0, columnspan=1)
+		self.head_label.grid(row=0, column=0, columnspan=2)
 
 		# create a label for messages
 		self.comm_label = tk.Label(self, text="", width=82, anchor=tk.W)
@@ -140,14 +159,23 @@ class AutoprogramApp(tk.Tk):
 		# create a dictionary with all the page objects (istantiations of respective classes)
 		self.frames = {}
 
-		# instantiate first frame
-		initialize_frame = InitializePage(container_frame, self) # F(container_frame, root)
+		for F in (InitializeFrame, InsertParametersFrame, CreateProgramFrame):
 
-		self.config_and_show_frame(initialize_frame)
+			frame = F(container_frame, self) # F(container_frame, root)
+
+			self.frames[F] = frame
+
+			#frame.grid(row=0, column=0, sticky="NSEW")
+
+		self.show_frame(InitializeFrame)
 
 
-	def config_and_show_frame(self, page_frame):
+	def show_frame(self, cont):
 		# this function shows the selected frame (the index arguent is the class itself)
+
+		page_frame = self.frames[cont]
+
+		self.comm_label.config(text="")
 
 		self.head_label.config(text=page_frame.head_text)
 
@@ -155,12 +183,12 @@ class AutoprogramApp(tk.Tk):
 
 		self.confirm_button.config(command=lambda: threading.Thread(target=page_frame.confirm_function).start(), state=page_frame.confirm_butt_state)
 
-		page_frame.grid(row=1, column=0, columnspan=2)
+		page_frame.grid(row=1, column=0, sticky="NSEW")
 
 		page_frame.tkraise()
 
 
-class InitializePage(tk.Frame):
+class InitializeFrame(tk.Frame):
 
 	def __init__(self, container_frame, root):
 
@@ -177,7 +205,7 @@ class InitializePage(tk.Frame):
 		self.root = root
 
 		# features to be passed to the root template frame
-		self.head_text = "initialization page"
+		self.head_text = "Initialization Page"
 
 		self.back_butt_state = tk.DISABLED
 
@@ -210,35 +238,26 @@ class InitializePage(tk.Frame):
 		pass
 
 
+	# @confirm_decorator
 	def confirm_function(self):
 		"""
 			this function is associated to the confirm button, it saves the user inputs into common variables and get other common variables based on those
 		"""
 
-		try:
+		common.Variables.fam_name = self.fam_listbox.get(tk.ANCHOR)
 
-			common.Variables.fam_name = self.fam_listbox.get(tk.ANCHOR)
+		common.Variables.tool_name = self.tool_name_entry.get()
 
-			common.Variables.tool_name = self.tool_name_entry.get()
+		app.Initialize.get_fam_dependent_vars()
 
-			app.Initialize.get_fam_dependent_vars()
+		self.root.frames[InsertParametersFrame].configure_frame()
 
-			self.root.comm_label.config(text="")
+		self.root.comm_label.config(text="")
 
-			self.grid_forget()
-
-			insert_parameters_page = InsertParametersPage(self.container_frame, self.root)
-
-			self.root.config_and_show_frame(insert_parameters_page)
-
-			# root.show_frame(InsertParametersPage)
-
-		except Exception as e:
-
-			self.root.comm_label.config(text=f'{e}')
+		self.root.show_frame(InsertParametersFrame)
 
 
-class InsertParametersPage(tk.Frame):
+class InsertParametersFrame(tk.Frame):
 
 	def __init__(self, container_frame, root):
 
@@ -248,12 +267,14 @@ class InsertParametersPage(tk.Frame):
 		# save the root in object variable
 		self.root = root
 
-		# features to be passed to the root template frame
-		self.head_text = "input parameters page"
-
 		self.back_butt_state = tk.NORMAL
 
 		self.confirm_butt_state = tk.NORMAL
+
+
+	def configure_frame(self):
+
+		self.head_text = "Input Parameters Page, Family: " + common.Variables.fam_name + ", Name: " + common.Variables.tool_name
 
 		# get a list with all the input descriptions, with the sam order of the input values
 		self.descr_list = app.InsertParameters.get_params_descr()
@@ -265,10 +286,10 @@ class InsertParametersPage(tk.Frame):
 		self.descr_label_list = [tk.Label(self, text=descr, width=20) for descr in self.descr_list]
 
 		# create a list of entries (its length is equal to descr_list)
-		self.entry_list = [tk.Entry(self, width=20) for i in range(params_num)]
+		self.entry_list = [tk.Entry(self, width=20) for i in range(self.params_num)]
 
 		# create an entry box and its description for each input parameters
-		for descr_label, entry, i in zip(self.descr_label_list, self.entry_list, range(params_num)):
+		for descr_label, entry, i in zip(self.descr_label_list, self.entry_list, range(self.params_num)):
 
 			descr_label.grid(row=i, column=0)
 
@@ -278,38 +299,63 @@ class InsertParametersPage(tk.Frame):
 	# back_function and confirm_function are to be passed to the back and confirm buttons
 	def back_function(self):
 
-		pass
+		self.root.show_frame(InitializeFrame)
 
 
+	# @confirm_decorator
 	def confirm_function(self):
 
 		input_vals = []
 
-		for entry in self.entry_list:
+		for i, entry in enumerate(self.entry_list):
 
-			input_vals.append(entry.get())
-		
+			input_val = float(entry.get())
+
+			input_vals.append(input_val)
+
 		app.InsertParameters.save_input_params(input_vals)
+
+		self.root.show_frame(CreateProgramFrame)
+
+		self.root.frames[CreateProgramFrame].run()
+
+
+class CreateProgramFrame(tk.Frame):
+
+	def __init__(self, container_frame, root):
+
+		# tk.Frame is used instead of super(), as tkinter classes are old
+		tk.Frame.__init__(self, container_frame) # instantiate itself inside the container frame (in the root)
+
+		# save the root in object variable
+		self.root = root
+
+		# features to be passed to the root template frame
+		self.head_text = "Creating the program..."
+
+		self.back_butt_state = tk.NORMAL
+
+		self.confirm_butt_state = tk.NORMAL
+
+
+	def run(self):
+
+		# function that creates the program, threaded in order to prevent the application from freezing
+		app.CreateProgram.run()
+
+
+	# back_function and confirm_function are to be passed to the back and confirm buttons
+	def back_function(self):
+
+		self.root.show_frame(InsertParametersFrame)
+
+
+	# @confirm_decorator
+	def confirm_function(self):
+
+		self.root.show_frame(InitializeFrame)
 
 
 def run():
 	app = AutoprogramApp() # istantiate root
 	app.mainloop()
-
-# 		button1 = ttk.Button(self, text="Send axis parameters to Visual Components 4.0", command=lambda: controller.show_frame(PageOne))
-
-# 		button1.place(x=65,y=50)
-# 70
-# 71 button2 = ttk.Button(self, text="Display sensor data",
-# 72 command=lambda: controller.show_frame(
-# PageThree))
-# 73 button2.place(x=65,y=80)
-# 74
-# 75 button3 = ttk.Button(self, text="Write data to file",
-# 76 command=lambda: controller.show_frame(PageTwo)
-# )
-# 77 button3.place(x=65,y=110)
-# 78
-# 79 close_button = ttk.Button(self, text="Close",command=self.quit)
-# 80
-# 81 close_button.place(x=65,y=140)
