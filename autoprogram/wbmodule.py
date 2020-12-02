@@ -100,13 +100,24 @@ def get_common_data():
 
 	try:
 
-		config_val_addr = common.Variables.values_database_sh.val_addr[common.Variables.values_database_sh.val_name.isin(config_val_names)].to_numpy() # take the addresses corresponding to the val names in the config workbook
+		config_val_addr = np.empty(0)
 
-		config_val_addr[pd.isnull(config_val_addr)] = None # set nan values to None (pd.isnull needed to address nan values)
+		config_val_descr = np.empty(0)
 
-		config_val_descr = common.Variables.values_database_sh.val_descr[common.Variables.values_database_sh.val_name.isin(config_val_names)].to_numpy() # take the descriptions corresponding to the val names in the config workbook
+		for val_name in config_val_names:
 
-		config_val_descr[pd.isnull(config_val_descr)] = None #  set nan values to None (pd.isnull needed to address nan values)
+			val_addr_i = common.Variables.values_database_sh.val_addr[common.Variables.values_database_sh.val_name == val_name].tolist()[0]
+
+			val_descr_i = common.Variables.values_database_sh.val_descr[common.Variables.values_database_sh.val_name == val_name].tolist()[0]
+
+			config_val_addr = np.append(config_val_addr, val_addr_i)
+
+			config_val_descr = np.append(config_val_descr, val_descr_i)
+
+		# No need for the following functions if no auxiliary parameters are used
+		# config_val_addr[pd.isnull(config_val_addr)] = None # set nan values to None (pd.isnull needed to address nan values)
+
+		# config_val_descr[pd.isnull(config_val_descr)] = None #  set nan values to None (pd.isnull needed to address nan values)
 
 	except KeyError:
 

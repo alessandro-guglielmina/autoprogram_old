@@ -1,107 +1,31 @@
-# import os
-# from itertools import compress
-
-# from autoprogram import common
-
-# # This function return the user inputs
-# def user_input(ch_list = None, ch_ids = None, cast = None, print_list = None): #(ch_list, ch_id, cast, print_list)
-# 	# If there is a list of choices
-# 	if ch_list is not None and ch_ids is not None:
-# 		cast = str
-# 		bound_val = True
-# 		print_list = ''
-# 		for i, j in zip(ch_ids, ch_list):
-# 			print_list = print_list + f'Enter {i} for {j}\n'
-# 		print_list = [print_list]
-# 	# if there isn't
-# 	elif cast is not None and print_list is not None:
-# 		bound_val = False
-# 	else:
-# 		raise ValueError('Wrong arguments combination.')
-# 	inp_list = []
-# 	converted = False
-# 	for i in print_list:
-# 		os.system('clear')
-# 		while True:
-# 			try:
-# 				inp_i = cast(input(f'{i}\n> ')) # user input call
-# 				if bound_val: # (so cast = str and ch_id must be given)
-# 					inp_i = inp_i.upper() # the choice must be capital to make the choice case insensitive
-# 					if inp_i in ch_ids:
-# 						bool_filt = [i == inp_i for i in ch_ids]
-# 						ch = list(compress(ch_list, bool_filt))[0] # use boolean indexing on a list
-# 						inp_i = ch # inp_val_i is reassigned with the choice corresponding to the chosen index
-# 						converted = True
-# 					else:
-# 						os.system('clear')
-# 						print("Input non among the possible choices.\n")
-# 				if converted or not bound_val:
-# 					os.system('clear')
-# 					inp_list.append(inp_i)
-# 					print("You have entered: " + str(inp_i) + "\n")
-# 					break
-# 			except ValueError:
-# 				print("Wrong input type\n")
-# 	res = inp_list
-# 	return res # list([inp1, inp2, ...])
-
-
-# def select_family(fam_name_list):
-# 		fam_name_ids = [str(i + 1) for i in list(range(len(fam_name_list)))]
-# 		# Acquire user input
-# 		print('Select family:\n')
-# 		common.Variables.fam_name = user_input(ch_list = fam_name_list, ch_ids = fam_name_ids)[0] # 'ch_fam'
-# 		os.system('clear')
-
-# def print_tool_type():
-# 	if common.Variables.tool_type:
-# 		print("Tool type is: " + common.Variables.tool_type)
-# 	else:
-# 		print("Tool type not assigned yet.")
-
-
-# def select_position(Position):
-# 		ch_list = ['confirm', 'repeat', 'move back']
-# 		ch_ids = ['C', 'R', 'B']
-# 		ch = user_input(ch_list = ch_list, ch_ids = ch_ids)
-# 		pos_select = ch[0]
-# 		if (pos_select == 'confirm'):
-# 			next_pos = Position.follow_pos
-# 		elif (pos_select == 'repeat'):
-# 			next_pos = Position.current_pos
-# 		elif (pos_select == 'move back'):
-# 			next_pos = Position.prev_pos
-# 		return next_pos
-
-
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 import threading
-import sys
 
 from autoprogram import appmodule as app
+from autoprogram import settingsmodule as sm
 from autoprogram import common
 
 LARGE_FONT= ("Verdana", 10)
 
 
-# def confirm_decorator(confirm_function):
-# 	"""
-# 		this decorator is added to any confirm function, in order to print the error (if any) on the communication label
-# 	"""
+def try_decorator(confirm_function):
+	"""
+		this decorator is added to any confirm function, in order to print the error (if any) on the communication label
+	"""
 
-# 	def wrapper_function(*args, **kwargs):
+	def wrapper_function(*args, **kwargs):
 
-# 		try:
+		try:
 
-# 			return confirm_function(*args, **kwargs)
+			return confirm_function(*args, **kwargs)
 
-# 		except Exception as e:
+		except Exception as e:
 
-# 			args[0].root.comm_label.config(text=f'{e}') # args[0] is self, i.e. the frame object (the page)
+			args[0].root.comm_label.config(text=f'{e}') # args[0] is self, i.e. the frame object (the page)
 
-# 	return wrapper_function
+	return wrapper_function
 
 
 # root class (tk.Tk is the root)
@@ -111,13 +35,13 @@ class AutoprogramApp(tk.Tk):
 
 		tk.Tk.__init__(self, *args, **kwargs)
 
-		# tk.Tk.iconbitmap(self, "icon bitmap path")
+		self.wm_title("autoprogram")
 
-		tk.Tk.wm_title(self, "autoprogram")
-
-		tk.Tk.geometry(self,'500x320')
+		self.geometry('500x320')
 
 		self.iconbitmap("images/icon.ico")
+
+		self.root = self # needed to use the try decorator on methods, as the object must have a root variable
 
 		# create a menu and its cascades
 		root_menu = tk.Menu(self)
@@ -128,12 +52,14 @@ class AutoprogramApp(tk.Tk):
 
 		root_menu.add_cascade(label="File",  menu = file_menu)
 
+		file_menu.add_command(label="Settings", command=self.show_settings_window)
+
 		file_menu.add_command(label="Exit", command=self.quit)
 
 		# create the container of the child frames, it's a frame inside the root (it's always the same frame because it's the one in the root)
-		container_frame = tk.Frame(self)
+		self.container_frame = tk.Frame(self)
 
-		container_frame.grid(row=1, column=0, columnspan=3, pady=20)
+		self.container_frame.grid(row=1, column=0, columnspan=3, pady=20)
 
 		# the following widgets get their features from the specific page
 		# create an heading
@@ -156,18 +82,32 @@ class AutoprogramApp(tk.Tk):
 
 		self.confirm_button.grid(row=3, column=1, pady=10)
 
-		# create a dictionary with all the page objects (istantiations of respective classes)
-		self.frames = {}
+		# instantiate page frame objects
+		self.instantiate_page_frames()
+
+
+	@try_decorator
+	def instantiate_page_frames(self):
+		"""
+		function that instantiate all the page frames
+		"""
+
+		self.frames = {} # create a dictionary with all the page objects (istantiations of respective classes)
 
 		for F in (InitializeFrame, InsertParametersFrame, CreateProgramFrame):
 
-			frame = F(container_frame, self) # F(container_frame, root)
+			frame = F(self.container_frame, self) # F(container_frame, root)
 
 			self.frames[F] = frame
 
-			#frame.grid(row=0, column=0, sticky="NSEW")
+			frame.grid(row=0, column=0, sticky="NSEW")
 
-		self.show_frame(InitializeFrame)
+		self.show_frame(InitializeFrame)	
+
+
+	def show_settings_window(self):
+
+			settings_window = SettingsWindow(self) # instantiate another window, passing the root as argument
 
 
 	def show_frame(self, cont):
@@ -190,13 +130,8 @@ class AutoprogramApp(tk.Tk):
 
 class InitializeFrame(tk.Frame):
 
+
 	def __init__(self, container_frame, root):
-
-		# save the root in object variable
-		self.root = root
-
-		# save the container frame in object variable
-		self.container_frame = container_frame
 
 		# tk.Frame is used instead of super(), as tkinter classes are old
 		tk.Frame.__init__(self, container_frame) # instantiate itself inside the container frame (in the root)
@@ -232,13 +167,55 @@ class InitializeFrame(tk.Frame):
 		self.tool_name_entry.grid(row=1, column=1, columnspan=1)
 
 
+	def configure_insert_params_frame(self):
+		"""
+			this function has to be called after the user has chosen the family, in order to set up the parameter entries for the following page 
+		"""
+
+		insert_params_frame = self.root.frames[InsertParametersFrame]
+
+		insert_params_frame.root.frames[InsertParametersFrame].head_text = "Input Parameters Page, Family: " + common.Variables.fam_name + ", Name: " + common.Variables.tool_name
+
+		# forget all the previous widgets
+		try:
+
+			for descr_label, entry in zip(insert_params_frame.root.frames[InsertParametersFrame].descr_label_list, insert_params_frame.root.frames[InsertParametersFrame].entry_list):
+
+				descr_label.grid_forget()
+
+				entry.grid_forget()
+
+		except AttributeError:
+
+			pass #if an AttributeError is raised, it means that no widget needs to be reset
+
+		# get a list with all the input descriptions, with the same order of the input values
+		insert_params_frame.descr_list = app.InsertParameters.get_params_descr()
+
+		# get the number of input parameters
+		insert_params_frame.params_num = len(insert_params_frame.descr_list)
+
+		# create a list with all the labels containing input descriptions
+		insert_params_frame.descr_label_list = [tk.Label(insert_params_frame, text=descr, width=20) for descr in insert_params_frame.descr_list]
+
+		# create a list of entries (its length is equal to descr_list)
+		insert_params_frame.entry_list = [tk.Entry(insert_params_frame, width=20) for i in range(insert_params_frame.params_num)]
+
+		# create an entry box and its description for each input parameters
+		for descr_label, entry, i in zip(insert_params_frame.descr_label_list, insert_params_frame.entry_list, range(insert_params_frame.params_num)):
+
+			descr_label.grid(row=i, column=0)
+
+			entry.grid(row=i, column=1)
+
+
 	# back_function and confirm_function are to be passed to the back and confirm buttons
 	def back_function(self):
 
 		pass
 
 
-	# @confirm_decorator
+	@try_decorator
 	def confirm_function(self):
 		"""
 			this function is associated to the confirm button, it saves the user inputs into common variables and get other common variables based on those
@@ -250,7 +227,7 @@ class InitializeFrame(tk.Frame):
 
 		app.Initialize.get_fam_dependent_vars()
 
-		self.root.frames[InsertParametersFrame].configure_frame()
+		self.configure_insert_params_frame()
 
 		self.root.comm_label.config(text="")
 
@@ -272,28 +249,14 @@ class InsertParametersFrame(tk.Frame):
 		self.confirm_butt_state = tk.NORMAL
 
 
-	def configure_frame(self):
+	def create_program(self):
 
-		self.head_text = "Input Parameters Page, Family: " + common.Variables.fam_name + ", Name: " + common.Variables.tool_name
+		self.root.comm_label.config(text='creating the program...')
 
-		# get a list with all the input descriptions, with the sam order of the input values
-		self.descr_list = app.InsertParameters.get_params_descr()
+		# function that creates the program, threaded in order to prevent the application from freezing
+		app.CreateProgram.run()
 
-		# get the number of input parameters
-		self.params_num = len(self.descr_list)
-
-		# create a list with all the labels containing input descriptions
-		self.descr_label_list = [tk.Label(self, text=descr, width=20) for descr in self.descr_list]
-
-		# create a list of entries (its length is equal to descr_list)
-		self.entry_list = [tk.Entry(self, width=20) for i in range(self.params_num)]
-
-		# create an entry box and its description for each input parameters
-		for descr_label, entry, i in zip(self.descr_label_list, self.entry_list, range(self.params_num)):
-
-			descr_label.grid(row=i, column=0)
-
-			entry.grid(row=i, column=1)
+		self.root.comm_label.config(text='program created!')
 
 
 	# back_function and confirm_function are to be passed to the back and confirm buttons
@@ -302,7 +265,7 @@ class InsertParametersFrame(tk.Frame):
 		self.root.show_frame(InitializeFrame)
 
 
-	# @confirm_decorator
+	@try_decorator
 	def confirm_function(self):
 
 		input_vals = []
@@ -317,7 +280,8 @@ class InsertParametersFrame(tk.Frame):
 
 		self.root.show_frame(CreateProgramFrame)
 
-		self.root.frames[CreateProgramFrame].run()
+		# the create program process is triggered when the confirm button of the previous page is pushed
+		self.create_program()
 
 
 class CreateProgramFrame(tk.Frame):
@@ -331,17 +295,11 @@ class CreateProgramFrame(tk.Frame):
 		self.root = root
 
 		# features to be passed to the root template frame
-		self.head_text = "Creating the program..."
+		self.head_text = "Create Program Page"
 
 		self.back_butt_state = tk.NORMAL
 
 		self.confirm_butt_state = tk.NORMAL
-
-
-	def run(self):
-
-		# function that creates the program, threaded in order to prevent the application from freezing
-		app.CreateProgram.run()
 
 
 	# back_function and confirm_function are to be passed to the back and confirm buttons
@@ -350,12 +308,58 @@ class CreateProgramFrame(tk.Frame):
 		self.root.show_frame(InsertParametersFrame)
 
 
-	# @confirm_decorator
+	@try_decorator
 	def confirm_function(self):
 
 		self.root.show_frame(InitializeFrame)
 
 
+class SettingsWindow(tk.Toplevel):
+
+	def __init__(self, root):
+
+		tk.Toplevel.__init__(self, root)
+
+		self.wm_title("settings")
+
+		self.geometry('400x220')
+
+		self.iconbitmap("images/icon.ico")
+
+		self.master_progs_dir_label = tk.Label(self, text='master programs directory: ').grid(row=0, column=0)
+
+		self.res_prog_dir_label = tk.Label(self, text='result program directory: ').grid(row=1, column=0)
+
+		self.master_progs_dir_entry = tk.Entry(self, width=40)
+
+		self.res_prog_dir_entry = tk.Entry(self, width=40)
+
+		self.master_progs_dir_entry.insert(0, common.Variables.master_progs_dir_path)
+
+		self.res_prog_dir_entry.insert(0, common.Variables.res_prog_dir_path)
+
+		self.master_progs_dir_entry.grid(row=0, column=1)
+
+		self.res_prog_dir_entry.grid(row=1, column=1)
+
+		self.cancel_button = tk.Button(self, text="Cancel", width=10, command=self.destroy)
+
+		self.cancel_button.grid(row=2, column=0, pady=10)
+
+		self.apply_button = tk.Button(self, text="Apply", width=10, command=self.save_work_dirs) # pass the function as thread in order to prevent the app from freezing
+
+		self.apply_button.grid(row=2, column=1, pady=10)
+
+	
+	def save_work_dirs(self):
+
+		master_progs_dir_path = self.master_progs_dir_entry.get()
+
+		res_prog_dir_path = self.res_prog_dir_entry.get()
+
+		sm.save_work_dirs(master_progs_dir_path, res_prog_dir_path)
+
+
 def run():
-	app = AutoprogramApp() # istantiate root
+	app = AutoprogramApp() # instantiate root
 	app.mainloop()

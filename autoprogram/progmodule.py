@@ -1,8 +1,6 @@
-import sqlite3
 import numpy as np
 import pandas as pd
 
-from autoprogram import settings
 from autoprogram import common
 from autoprogram import dbmodule as dbm
 
@@ -21,24 +19,7 @@ def prog_select(path):
 		print('Unknown file type.')
 
 
-# Returns if a value can be cast as float or not
-def is_float(val):
-
-	try:
-
-		float(val)
-
-		return True
-
-	except ValueError:
-
-		return False
-
-
-is_numeric = lambda x: any(list(map(is_float, x)))
-
-
-class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "PROGRAM" AS PARENT OBJECT. "PROGRAM" IS INHERITED BY ANCA_PROG TOO
+class VgpProg(dbm.DataBase):
 	
 	def __init__(self, path):
 
@@ -383,9 +364,9 @@ class VgpProg(dbm.DataBase): # CREATE SAME FUNCTIONS IN AN OBJECT THAT IHERIT "P
 
 		to_scale_qry_data = self.get_to_scale_qry_data()
 
-		up_prog = prog_select(common.Variables.up_prog_filename)
+		up_prog = VgpProg(common.Variables.up_prog_filename)
 
-		low_prog = prog_select(common.Variables.low_prog_filename)
+		low_prog = VgpProg(common.Variables.up_prog_filename)
 
 		with up_prog, low_prog:
 

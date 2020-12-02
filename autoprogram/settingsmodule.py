@@ -1,0 +1,40 @@
+import configparser
+
+
+# settings file name
+settings_filename = 'autoprogram/settings.ini' # settings path with respect to the project root
+
+# work directories section
+work_directories_section = 'work_directories'
+
+# master programs directory variable in the .ini file
+master_progs_dir_var = 'master_progs_dir'
+
+# result program directory variable in the .ini file
+res_prog_dir_var = 'res_prog_dir'
+
+# instantiate
+config = configparser.ConfigParser()
+
+# parse settings file
+config.read(settings_filename)
+
+# read string values from the working directories section
+#try:
+
+master_progs_dir_path = config.get(work_directories_section, master_progs_dir_var)
+
+res_prog_dir_path = config.get(work_directories_section, res_prog_dir_var)
+
+#except
+
+
+def save_work_dirs(master_progs_dir, res_prog_dir):
+
+	config.set(work_directories_section, master_progs_dir_var, master_progs_dir)
+
+	config.set(work_directories_section, res_prog_dir_var, res_prog_dir)
+
+	# save to a file
+	with open(settings_filename, 'w') as configfile:
+		config.write(configfile)

@@ -19,52 +19,27 @@ pd.options.mode.chained_assignment = None  # default='warn'
 # This is the first program step in which the information carrier is initialized with the familiy name (provided by the user)
 class Initialize(object):
 
-	# prev_pos = 'initialize'
-
-	# current_pos = prev_pos
-
-	# follow_pos = 'insert_parameters'
-
-
-	# @classmethod
-	# def activate(cls):
-
-	# 	cls.insert_preliminary_data()
-
-	# 	cls.get_fam_dependent_vars()
-
-	# 	cls.get_tool_type()
-
-	# 	cls.get_val_addr()
-
-	# 	cls.get_common_data()
-
-
 	# Get the family names from the family directories inside the master programs directory
 	@classmethod
 	def get_fam_names(cls):
 
-		return [str(fam_dir.name) for fam_dir in common.Variables.master_progs_dir.iterdir() if fam_dir.is_dir()]
+		try:
 
+			return [str(fam_dir.name) for fam_dir in common.Variables.master_progs_dir.iterdir() if fam_dir.is_dir()]
 
-	# Get the family name from user
-	# @classmethod
-	# def insert_preliminary_data(cls):
+		except FileNotFoundError:
 
-	# 	# Acquire tool name
-	# 	# common.Variables.tool_name = input('Insert tool name:\n>')
-	# 	common.Variables.tool_name = 'res_prog'
-
-	# 	# Create array containing all family names (string format)
-	# 	fam_name_list = cls.get_fam_names() # ['fam1', 'fam2', ...]
-
-	# 	# Select family
-	# 	ui.select_family(fam_name_list)
+			raise ValueError(f'No such a master programs directory: {common.Variables.master_progs_dir.__str__()}')
 
 
 	# Get common data dependent on the chosen family
 	@classmethod
 	def get_fam_dependent_vars(cls):
+
+		# assign these global variables after pushing the confirm button and not while starting the application, otherwise it would make the application crash if a wrong path is inserted
+		common.Variables.values_database_wb = wbm.WorkBook(Path(common.Variables.master_progs_dir / common.Variables.values_database_wb_filename))
+
+		common.Variables.values_database_sh = list(common.Variables.values_database_wb.wb.values())[0] # first wb sheet selection, it's a DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
 
 		# get family directory
 		fam_prog_dir = Path(common.Variables.master_progs_dir/common.Variables.fam_name)
@@ -75,7 +50,7 @@ class Initialize(object):
 		# assign the configuration file
 		common.Variables.config_file_wb =  wbm.WorkBook(Path(fam_prog_dir/common.Variables.config_file_wb_filename))
 
-		# get the tool type from the family name and get the diameter address based on that
+		# get the tool type from the family name and get the diameter address based on that (IT'S BETTER TO CONFIGURE DIAM ADDRESS)
 		if 'DRILL' in common.Variables.fam_name.upper():
 
 			common.Variables.tool_type = 'drill'
@@ -106,13 +81,18 @@ class InsertParameters(object):
 	def get_params_descr(cls):
 
 		# Create printing list
-		all_rel = common.Variables.data.rel.tolist()
+		all_rel = common.Variables.data.rel.to_numpy()
 
-		all_descr = common.Variables.data.val_descr.tolist()
+		all_descr = common.Variables.data.val_descr.to_numpy()
 
-		inp_vals_filter = [i == None for i in all_rel]
+		# print(all_rel)
+		# print(all_descr)
 
-		descr_list = list(compress(all_descr, inp_vals_filter)) # use boolean indexing with lists
+		inp_vals_filter = np.equal(all_rel, None) # input values are those not having any relationship with others
+
+		descr_list = all_descr[inp_vals_filter]
+
+		# print(descr_list)
 
 		return descr_list # [descr1, descr2, ...]
 
@@ -160,7 +140,7 @@ class CreateProgram(object):
 			prog_path_i = Path(i)
 
 			# Open a context manager with the db composition of prog_i+ to open a connection with the vgp program (database)
-			with  pm.prog_select(prog_path_i) as prog_i:
+			with  pm.VgpProg(prog_path_i) as prog_i:
 
 				diam_i = prog_i.get_values_from_addr([common.Variables.diam_addr]).val.values[0] # float, DataFrame.val.values is a 1-sized numpy array
 
@@ -221,11 +201,17 @@ class CreateProgram(object):
 
 		common.Variables.res_prog_filename = partial_res_prog_filename.with_suffix(common.Variables.vgp_suffix)
 
-		# Copy the master program with the target program name (create the target program)
-		shutil.copyfile(master_prog_filename, common.Variables.res_prog_filename)
+		try:
 
-		# Instantiate the result program object
-		common.Variables.res_prog = pm.prog_select(common.Variables.res_prog_filename)
+			# Copy the master program with the target program name (create the target program)
+			shutil.copyfile(master_prog_filename, common.Variables.res_prog_filename)
+
+			# Instantiate the result program object
+			common.Variables.res_prog = pm.VgpProg(common.Variables.res_prog_filename)
+
+		except FileNotFoundError:
+
+			raise ValueError(f'No such a result program directory: {common.Variables.res_prog_dir.__str__()}')
 
 
 	@classmethod
