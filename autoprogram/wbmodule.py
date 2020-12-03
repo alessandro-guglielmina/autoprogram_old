@@ -10,7 +10,9 @@ class WorkBook(object):
 
 		self.path = path
 
-		self.wb = pd.read_excel(self.path, sheet_name = None, dtype=str) # read all the sheets in the workbook and save it in  a dictionary of DataFrames where each DataFrame is a sheet
+		# read all the sheets in the workbook and save it in  a dictionary of DataFrames where each DataFrame is a sheet,
+		#the first two rows are skippd because they contain comments
+		self.wb = pd.read_excel(self.path, sheet_name = None, dtype=str, skiprows=(0, 1)) 
 
 
 	# Get values array from single id

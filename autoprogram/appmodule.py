@@ -8,6 +8,7 @@ import pandas as pd
 import shutil
 from itertools import compress
 import re
+import math
 
 from autoprogram import common
 from autoprogram import wbmodule as wbm
