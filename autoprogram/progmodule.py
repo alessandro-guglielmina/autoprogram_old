@@ -5,20 +5,6 @@ from autoprogram import common
 from autoprogram import dbmodule as dbm
 
 
-# Function allowing to choose the correct object depending on the file extension
-def prog_select(path):
-
-	if path.suffix == common.Variables.vgp_suffix:
-
-		res = VgpProg(path)
-
-		return res
-
-	else:
-
-		print('Unknown file type.')
-
-
 class VgpProg(dbm.DataBase):
 	
 	def __init__(self, path):
@@ -366,7 +352,7 @@ class VgpProg(dbm.DataBase):
 
 		up_prog = VgpProg(common.Variables.up_prog_filename)
 
-		low_prog = VgpProg(common.Variables.up_prog_filename)
+		low_prog = VgpProg(common.Variables.low_prog_filename)
 
 		with up_prog, low_prog:
 
