@@ -29,11 +29,11 @@ res_prog_dir_path = config.get(work_directories_section, res_prog_dir_var)
 #except
 
 
-def save_work_dirs(master_progs_dir, res_prog_dir):
+def save_work_dirs(master_progs_dir_path, res_prog_dir_path):
 
-	config.set(work_directories_section, master_progs_dir_var, master_progs_dir)
+	config.set(work_directories_section, master_progs_dir_var, master_progs_dir_path)
 
-	config.set(work_directories_section, res_prog_dir_var, res_prog_dir)
+	config.set(work_directories_section, res_prog_dir_var, res_prog_dir_path)
 
 	# save to a file
 	with open(settings_filename, 'w') as configfile:

@@ -16,7 +16,11 @@ class Variables(object):
 
 	values_database_wb_filename = 'values database.xlsx'
 
+	database_sh_name ='database'
+
 	config_file_wb_filename = 'configuration file.xlsx'
+
+	diam_name_sh_name = 'diameter name'
 
 	config_vals_sh_name = 'configuration values'
 

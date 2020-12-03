@@ -36,10 +36,11 @@ class Initialize(object):
 	@classmethod
 	def get_fam_dependent_vars(cls):
 
-		# assign these global variables after pushing the confirm button and not while starting the application, otherwise it would make the application crash if a wrong path is inserted
+		# assign this global variables after pushing the confirm button and not while starting the application  (even if it doesn't depend on the family choice),
+		# otherwise a wrong master programs directory path would make the application crash!!!
 		common.Variables.values_database_wb = wbm.WorkBook(Path(common.Variables.master_progs_dir / common.Variables.values_database_wb_filename))
 
-		common.Variables.values_database_sh = list(common.Variables.values_database_wb.wb.values())[0] # first wb sheet selection, it's a DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
+		common.Variables.values_database_sh = common.Variables.values_database_wb.wb[common.Variables.database_sh_name] # database sheet selection, it's a DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
 
 		# get family directory
 		fam_prog_dir = Path(common.Variables.master_progs_dir/common.Variables.fam_name)
@@ -50,27 +51,50 @@ class Initialize(object):
 		# assign the configuration file
 		common.Variables.config_file_wb =  wbm.WorkBook(Path(fam_prog_dir/common.Variables.config_file_wb_filename))
 
-		# get the tool type from the family name and get the diameter address based on that (IT'S BETTER TO CONFIGURE DIAM ADDRESS)
-		if 'DRILL' in common.Variables.fam_name.upper():
-
-			common.Variables.tool_type = 'drill'
-
-			common.Variables.diam_addr = common.Variables.drill_diam_addr
-
-		elif 'MILL' in common.Variables.fam_name.upper():
-
-			common.Variables.tool_type = 'mill'
-
-		elif 'REAMER' in Variables.fam_name.upper():
-
-			common.Variables.tool_type = 'reamer'
-
-		else:
-
-			raise ValueError('No such a tool type.')
+		# get the parameter name associated with the diameter (needed to select the master program)
+		common.Variables.diam_addr = common.Variables.config_file_wb.wb[common.Variables.diam_name_sh_name]['diam_name'][0]
 
 		# get the common data from the configuration file
-		common.Variables.data = wbm.get_common_data()
+		common.Variables.data = cls.get_common_data()
+
+
+	# with this method, all the common data (addresses, relations, descriptions, ...) are collected, depending on the selected family
+	@staticmethod
+	def get_common_data():
+		# this function gets the addresses and the descriptions of the parameters that has to be configured (by user input or relationship)
+
+		# get val_names and rels from the configuration values workbook
+		config_val_names = common.Variables.config_file_wb.get_whole_column(common.Variables.config_vals_sh_name,'val_name')
+
+		config_rels = common.Variables.config_file_wb.get_whole_column(common.Variables.config_vals_sh_name, 'rel')
+
+		config_val_addr = common.Variables.values_database_wb.get_values_multi_ids(common.Variables.database_sh_name, 'val_name', 'val_addr', config_val_names)
+
+		config_val_descr = common.Variables.values_database_wb.get_values_multi_ids(common.Variables.database_sh_name, 'val_name', 'val_descr', config_val_names)
+
+		# Sect-percs and vals are set to None
+		config_sect_percs = np.array([None for i in config_val_names])
+
+		config_vals = np.array([None for i in config_val_names])
+
+		# Build the common data DataFrame
+		res = pd.DataFrame({'val_name': pd.Series(config_val_names, dtype='str'),
+
+		             		'rel': pd.Series(config_rels, dtype='str'),
+
+		             		'val_addr': pd.Series(config_val_addr, dtype='str'),
+
+		             		'val_descr': pd.Series(config_val_descr, dtype='str'),
+
+		             		'sect_perc': pd.Series(config_sect_percs, dtype='object'),
+
+		             		'val': pd.Series(config_vals, dtype='object')})
+
+		if not common.Variables.diam_addr in res.val_addr.tolist():
+
+			raise ValueError('Diameter value missing among the configuration values.')
+			
+		return res # DataFrame('val_addr', 'val_type', 'val_descr')
 
 
 # This is the program phase in which the user defines the geometrical parameter of the tool
@@ -248,11 +272,11 @@ class CreateProgram(object):
 
 					arg_vals = [i[0] for i in arg_vals] # dereference the arrays, take only the value inside them
 
-					rel_exp = row.rel
+					rel_exp = 'val=' + row.rel # added 'val=' in order to assign the result of the expression in a variable, thus can be retrieved once exec has been executed (exec doesn't return anything)
 
 					for arg_name, arg_val in zip(arg_names, arg_vals):
 
-						rel_exp = re.sub(r'\${}\$'.format(arg_name), str(arg_val), rel_exp) # substitute the val names in the expression with their value, one at each for cycle
+						rel_exp = re.sub(r'\${}\$'.format(arg_name), str(arg_val), rel_exp) # substitute the val names in the expression with their actual value, one at each for cycle
 
 					local_dict = {}
 
@@ -312,7 +336,7 @@ class CreateProgram(object):
 
 				funct_val_names = funct_val_sheet.columns[1:] # take all the headings but the first one (that is the argument value)
 
-				funct_val_names = [i for i in funct_val_names if not ('UNNAMED' in i.upper() or 'WHEEL' in i.upper())] # takes only the actual result values headings, not the assigned wheels and the empty coluns (whose heading is imported as 'unnamed...')
+				funct_val_names = [i for i in funct_val_names if not ('UNNAMED' in i.upper())] # takes only the actual result values headings, not the empty colums (whose heading is imported as 'unnamed')
 
 				columns = ['sect_perc', 'val']
 
@@ -325,6 +349,21 @@ class CreateProgram(object):
 					try:
 
 						funct_val = np.array(raw_funct_val.split(common.Variables.separator)).astype(float) # array of floats from the spreadsheet
+
+						# convert m/s to mm/s if it's a cutting speed
+						if 'SPEED' in funct_val_name.upper():
+
+							funct_val = funct_val*1000
+
+						# convert mm/min to mm/s if it's a feed rate
+						if 'FEED' in funct_val_name.upper():
+
+							funct_val = funct_val/60
+
+						# otherwise the values are already correct
+						else:
+
+							pass
 
 					except ValueError:
 
