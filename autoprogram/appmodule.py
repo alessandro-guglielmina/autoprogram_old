@@ -53,7 +53,7 @@ class Initialize(object):
 		common.Variables.config_file_wb =  wbm.WorkBook(Path(fam_prog_dir/common.Variables.config_file_wb_filename))
 
 		# get the parameter name associated with the diameter (needed to select the master program)
-		common.Variables.diam_addr = common.Variables.config_file_wb.wb[common.Variables.diam_name_sh_name]['diam_name'][0]
+		common.Variables.diam_name = common.Variables.config_file_wb.wb[common.Variables.diam_name_sh_name]['diam_name'][0]
 
 		# get the common data from the configuration file
 		common.Variables.data = cls.get_common_data()
@@ -91,7 +91,8 @@ class Initialize(object):
 
 		             		'val': pd.Series(config_vals, dtype='object')})
 
-		if not common.Variables.diam_addr in res.val_addr.tolist():
+
+		if not common.Variables.diam_name in res.val_name.tolist():
 
 			raise ValueError('Diameter value missing among the configuration values.')
 			
@@ -130,7 +131,7 @@ class InsertParameters(object):
 		common.Variables.data.loc[common.Variables.data.rel.isnull(), 'val'] = input_vals # write user input values in common.Variables.data (isnull() needed to reference None values)
 
 		# Save the diameter value in a common variable in order to be easily accessed while choosing the master program
-		common.Variables.diam = common.Variables.data.loc[common.Variables.data.val_addr == common.Variables.diam_addr, 'val'].values[0][0] # dereference all values with .values as ndarray and then with [0]
+		common.Variables.diam = common.Variables.data.loc[common.Variables.data.val_name == common.Variables.diam_name, 'val'].values[0][0] # dereference all values with .values as ndarray and then with [0]
 
 
 # This is the program phase in which the program makes computation to get the result program
@@ -167,7 +168,7 @@ class CreateProgram(object):
 			# Open a context manager with the db composition of prog_i+ to open a connection with the vgp program (database)
 			with  pm.VgpProg(prog_path_i) as prog_i:
 
-				diam_i = prog_i.get_values_from_addr([common.Variables.diam_addr]).val.values[0] # float, DataFrame.val.values is a 1-sized numpy array
+				diam_i = prog_i.get_values_from_names([common.Variables.diam_name]).val.values[0] # float, DataFrame.val.values is a 1-sized numpy array
 
 			diam_arr = np.append(diam_arr, diam_i)
 
@@ -273,7 +274,7 @@ class CreateProgram(object):
 
 					arg_vals = [i[0] for i in arg_vals] # dereference the arrays, take only the value inside them
 
-					rel_exp = 'val=' + row.rel # added 'val=' in order to assign the result of the expression in a variable, thus can be retrieved once exec has been executed (exec doesn't return anything)
+					rel_exp = 'val = ' + row.rel # added 'val = ' in order to assign the result of the expression in a variable, thus can be retrieved once exec has been executed (exec doesn't return anything)
 
 					for arg_name, arg_val in zip(arg_names, arg_vals):
 
@@ -301,75 +302,76 @@ class CreateProgram(object):
 	@classmethod	
 	def apply_functions(self):
 
+		funct_vals_sh_names = [common.Variables.funct_vals_1_sh_name, common.Variables.funct_vals_2_sh_name]
+
 		funct_vals_sheets = []
 
-		try:
+		for funct_vals_sh_name in funct_vals_sh_names:
 
-			funct_vals_1_sh =  common.Variables.config_file_wb.wb[common.Variables.funct_vals_1_sh_name] # DataFrame with the first page of function values
+			try:
 
-			funct_vals_sheets.append(funct_vals_1_sh)
+				funct_vals_sh =  common.Variables.config_file_wb.wb[funct_vals_sh_name] # DataFrame with the first page of function values
 
-		except KeyError:
+				funct_vals_sheets.append(funct_vals_sh)
 
-			raise ValueError('First function values sheet missing.') # the first function values sheet is mandatory
+			except KeyError:
 
-		try:
+				pass # function values sheets are not mandatory
 
-			funct_vals_2_sh =  common.Variables.config_file_wb.wb[common.Variables.funct_vals_2_sh_name] # DataFrame with the first page of function values
+		# parse function values sheets only if any
+		if len(funct_vals_sheets) > 0:
 
-			funct_vals_sheets.append(funct_vals_2_sh)
+			for funct_val_sheet in funct_vals_sheets:
 
-		except KeyError:
+				funct_arg_name = funct_val_sheet.columns[0] # takes the first column heading, i.e. the function argument (most times the tool diameter)
 
-			pass # the second function values sheet is not mandatory
+				with common.Variables.res_prog as res_prog: # context manager opening the program
 
-		for funct_val_sheet in funct_vals_sheets:
+					funct_arg_val = res_prog.get_values_from_names([funct_arg_name]).val[0][0] # take function argument value (i.e. the val component)
 
-			funct_arg_name = funct_val_sheet.columns[0] # takes the first column heading, i.e. the function argument (most times the tool diameter)
+					diff = funct_val_sheet[funct_arg_name].astype(float).sub(funct_arg_val) # config file argument values - actual program value
 
-			with common.Variables.res_prog as res_prog: # context manager opening the program
+					idx = diff[diff < 0].idxmax() # take the index of the gratest smaller argument value in the config file argument column
 
-				funct_arg_val = res_prog.get_values_from_names([funct_arg_name]).val[0][0] # take function argument value (i.e. the val component)
+					funct_val_names = funct_val_sheet.columns[1:] # take all the headings but the first one (that is the argument value)
 
-				diff = funct_val_sheet[funct_arg_name].astype(float).sub(funct_arg_val) # config file argument values - actual program value
+					funct_val_names = [i for i in funct_val_names if not ('UNNAMED' in i.upper())] # takes only the actual result values headings, not the empty colums (whose heading is imported as 'unnamed')
 
-				idx = diff[diff < 0].idxmax() # take the index of the gratest smaller argument value in the config file argument column
+					columns = ['sect_perc', 'val']
 
-				funct_val_names = funct_val_sheet.columns[1:] # take all the headings but the first one (that is the argument value)
+					comp_funct_vals = pd.DataFrame(columns = columns, dtype = object) # complete function values (just to be updated in the program)
 
-				funct_val_names = [i for i in funct_val_names if not ('UNNAMED' in i.upper())] # takes only the actual result values headings, not the empty colums (whose heading is imported as 'unnamed')
+					for funct_val_name in funct_val_names:
 
-				columns = ['sect_perc', 'val']
+						raw_funct_val = funct_val_sheet.loc[idx, funct_val_name] # take the raw text value from the spreadsheet
 
-				comp_funct_vals = pd.DataFrame(columns = columns, dtype = object) # complete function values (just to be updated in the program)
+						try:
 
-				for funct_val_name in funct_val_names:
+							funct_val = np.array(raw_funct_val.split(common.Variables.separator)).astype(float) # array of floats from the spreadsheet
 
-					raw_funct_val = funct_val_sheet.loc[idx, funct_val_name] # take the raw text value from the spreadsheet
+							# convert m/s to mm/s if it's a cutting speed
+							if 'SPEED' in funct_val_name.upper():
 
-					try:
+								funct_val = funct_val*1000
 
-						funct_val = np.array(raw_funct_val.split(common.Variables.separator)).astype(float) # array of floats from the spreadsheet
+							# convert mm/min to mm/s if it's a feed rate
+							if 'FEED' in funct_val_name.upper():
 
-						# convert m/s to mm/s if it's a cutting speed
-						if 'SPEED' in funct_val_name.upper():
+								funct_val = funct_val/60
 
-							funct_val = funct_val*1000
+							# otherwise the values are already correct
+							else:
 
-						# convert mm/min to mm/s if it's a feed rate
-						if 'FEED' in funct_val_name.upper():
+								pass
 
-							funct_val = funct_val/60
+						except ValueError:
 
-						# otherwise the values are already correct
-						else:
+							raise ValueError(f'Wrong function value format in the function values sheet: column {funct_val_name}, row {idx}') # if there is some format error, raise a ValueError
 
-							pass
+						comp_funct_vals = comp_funct_vals.append({'sect_perc' : None, 'val' : funct_val}, ignore_index = True)
 
-					except ValueError:
+					res_prog.update_values_from_names(funct_val_names, comp_funct_vals)
 
-						raise ValueError(f'Wrong function value format in the function values sheet: column {funct_val_name}, row {idx}') # if there is some format error, raise a ValueError
+		else:
 
-					comp_funct_vals = comp_funct_vals.append({'sect_perc' : None, 'val' : funct_val}, ignore_index = True)
-
-				res_prog.update_values_from_names(funct_val_names, comp_funct_vals)
+			pass

@@ -19,17 +19,20 @@ class VgpProg(dbm.DataBase):
 
 	VGP_Value_Double_table = 'VGP_Value_Double'
 
+	VGP_Value_Int_table = 'VGP_Value_Int'
+
 	VGP_Value_FunctionD_table = 'VGP_Value_FunctionD'
 
+	# this dictionary collect the column strucure of all the used tables present in the VGP program
 	table_col_dict = {
-						'id_col' : {Parameter_table : 'PA_Id', VGP_Data_table : 'ID', VGP_Value_Double_table : 'D_Id', VGP_Value_FunctionD_table : 'D_Id', Curve_table : None},
-						'sect_perc_col' : {Parameter_table : None, VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : 'D_Parameter', Curve_table : None},
-						'val_col' : {Parameter_table : 'PA_Value', VGP_Data_table : None, VGP_Value_Double_table : 'D_Value', VGP_Value_FunctionD_table : 'D_Value', Curve_table : None},
-						'val_addr_col' : {Parameter_table : None, VGP_Data_table : 'PartialFullname', VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table : None},
-						'name_col' : {Parameter_table : 'PA_Name', VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table : None},
-						'datatype_col' : {Parameter_table : None, VGP_Data_table : 'VGP_Value_Type', VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table : None},
-						'curve_id_col' : {Parameter_table : 'PA_CurveId', VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table  : 'CU_Id'},
-						'curve_type_col' : {Parameter_table : None, VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_FunctionD_table : None, Curve_table  : 'CU_Type'},
+						'id_col' : {Parameter_table : 'PA_Id', VGP_Data_table : 'ID', VGP_Value_Double_table : 'D_Id', VGP_Value_Int_table : 'D_Id', VGP_Value_FunctionD_table : 'D_Id', Curve_table : None},
+						'sect_perc_col' : {Parameter_table : None, VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_Int_table : None , VGP_Value_FunctionD_table : 'D_Parameter', Curve_table : None},
+						'val_col' : {Parameter_table : 'PA_Value', VGP_Data_table : None, VGP_Value_Double_table : 'D_Value', VGP_Value_Int_table : 'D_Value', VGP_Value_FunctionD_table : 'D_Value', Curve_table : None},
+						'val_addr_col' : {Parameter_table : None, VGP_Data_table : 'PartialFullname', VGP_Value_Double_table : None, VGP_Value_Int_table : None, VGP_Value_FunctionD_table : None, Curve_table : None},
+						'name_col' : {Parameter_table : 'PA_Name', VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_Int_table : None, VGP_Value_FunctionD_table : None, Curve_table : None},
+						'datatype_col' : {Parameter_table : None, VGP_Data_table : 'VGP_Value_Type', VGP_Value_Double_table : None, VGP_Value_Int_table : None, VGP_Value_FunctionD_table : None, Curve_table : None},
+						'curve_id_col' : {Parameter_table : 'PA_CurveId', VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_Int_table : None, VGP_Value_FunctionD_table : None, Curve_table  : 'CU_Id'},
+						'curve_type_col' : {Parameter_table : None, VGP_Data_table : None, VGP_Value_Double_table : None, VGP_Value_Int_table : None, VGP_Value_FunctionD_table : None, Curve_table  : 'CU_Type'},
 					 }
 
 	table_col = pd.DataFrame(table_col_dict)
@@ -124,7 +127,7 @@ class VgpProg(dbm.DataBase):
 
 			id_ = dts_n_ids[1]
 
-			if dtype in [self.Parameter_table, self.VGP_Value_Double_table]:
+			if dtype in [self.Parameter_table, self.VGP_Value_Double_table, self.VGP_Value_Int_table]:
 
 				res = res.append({'val_addr' : addr, 'table' : dtype, 'id_col' : self.table_col.loc[dtype, 'id_col'], 'sect_perc_col' : None, 'val_col' : self.table_col.loc[dtype, 'val_col'],\
 
@@ -153,14 +156,28 @@ class VgpProg(dbm.DataBase):
 
 		for i, row in qry_data.iterrows(): # row is the pd.Series corresponding to a specific row
 
-			# If the value is a scalar value
+			# If the value is a scalar integer
+			if row.table == self.VGP_Value_Int_table:
+
+				val = self.get_values_single_id(row.table, row.id_col, row.val_col, row.id) # value can be either an array of string or None values
+
+
+				if val:
+
+					val = val.astype(int)
+
+				else:
+
+					val = np.array([np.nan])
+
+				res = res.append({'sect_perc' : None, 'val' : val}, ignore_index = True)
+
+			# If the value is a scalar float
 			if row.table in [self.Parameter_table, self.VGP_Value_Double_table]:
 
 				val = self.get_values_single_id(row.table, row.id_col, row.val_col, row.id) # value can be either an array of string or None values
 
-				val = self.get_values_single_id(row.table, row.id_col, row.val_col, row.id)
-
-				if val[0] is not None:
+				if val:
 
 					val = np.char.rstrip(val, ' mm°')
 
@@ -233,16 +250,24 @@ class VgpProg(dbm.DataBase):
 
 	# Return a list containng both scalar values and function values in string format (to obtain float values the output must be cast!!!)
 	def update_values_from_qry_data(self, qry_data, vals): #(self, DataFrame(['val_addr', 'table', 'id_col', 'sect_perc_col', 'val_col', 'id'])), DataFrame(['sect_perc', 'val'])
+
 		for qry_data_iterrows, vals_iterrows in zip(qry_data.iterrows(), vals.iterrows()):
 
 			qry_i, qry_row = qry_data_iterrows
 
 			val_i, val_row = vals_iterrows
 
-			# If the value is a scalar:
+			# If the value is a float scalar:
 			if qry_row.table in [self.Parameter_table, self.VGP_Value_Double_table]:
 
-				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
+				#print(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
+
+				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val) # no need to cast, as all the values are float already
+
+			# If the value is an integer scalar:
+			elif qry_row.table == self.VGP_Value_Int_table:
+
+				self.update_values_single_id(qry_row.table, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val) # value must be cast,from float to integer
 
 			# If the value is a function:
 			elif qry_row.table == self.VGP_Value_FunctionD_table:
@@ -253,7 +278,7 @@ class VgpProg(dbm.DataBase):
 				# if not hasattr(val_row.val, "__len__") and val_row.sect_perc == None:
 				if val_len == 1 and val_row.sect_perc is None:
 
-					val_row.val = [val_row.val]*2
+					val_row.val = val_row.val*2
 
 					val_row.sect_perc = [0, 1]
 
