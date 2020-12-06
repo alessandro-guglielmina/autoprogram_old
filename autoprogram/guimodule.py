@@ -86,7 +86,7 @@ class AutoprogramApp(tk.Tk):
 		self.instantiate_page_frames()
 
 
-	#@try_decorator
+	@try_decorator
 	def instantiate_page_frames(self):
 		"""
 		function that instantiate all the page frames
@@ -215,7 +215,7 @@ class InitializeFrame(tk.Frame):
 		pass
 
 
-	#@try_decorator
+	@try_decorator
 	def confirm_function(self):
 		"""
 			this function is associated to the confirm button, it saves the user inputs into common variables and get other common variables based on those
@@ -265,7 +265,7 @@ class InsertParametersFrame(tk.Frame):
 		self.root.show_frame(InitializeFrame)
 
 
-	#@try_decorator
+	@try_decorator
 	def confirm_function(self):
 
 		input_vals = []
@@ -308,7 +308,7 @@ class CreateProgramFrame(tk.Frame):
 		self.root.show_frame(InsertParametersFrame)
 
 
-	#@try_decorator
+	@try_decorator
 	def confirm_function(self):
 
 		self.root.show_frame(InitializeFrame)

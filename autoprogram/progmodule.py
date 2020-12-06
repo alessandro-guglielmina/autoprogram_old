@@ -278,7 +278,7 @@ class VgpProg(dbm.DataBase):
 				# if not hasattr(val_row.val, "__len__") and val_row.sect_perc == None:
 				if val_len == 1 and val_row.sect_perc is None:
 
-					val_row.val = val_row.val*2
+					val_row.val = [val_row.val[0], val_row.val[0]]
 
 					val_row.sect_perc = [0, 1]
 
