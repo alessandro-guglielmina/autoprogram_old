@@ -4,16 +4,16 @@ except ImportError:
 	from distutils.core import setup
 
 config = {
-'description': 'Automate programs',
+'description': 'Automate VGPro part programming',
 'author': 'Alessandro Guglielmina',
 'url': '/',
 'download_url': '/',
 'author_email': 'alessandro.guglielmina@gmail.com',
-'version': '0.1',
+'version': '1.0',
 'install_requires': [],
 'packages': [],
 'scripts': [],
-'name': 'projectname'
+'name': 'autoprogram'
 }
 
 setup(**config)
