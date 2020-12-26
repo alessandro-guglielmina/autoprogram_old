@@ -1,17 +1,46 @@
+import sqlite3 as sql
 import numpy as np
 import pandas as pd
 
 from autoprogram import common
-from autoprogram import dbmodule as dbm
 
 
-class VgpProg(dbm.DataBase):
+class VgpProgram(object):
 	
 	def __init__(self, path):
 
-		super().__init__(path)
+		self.path = path
 
-	Curve_table = 'Curve'
+	# __enter__ and __exit__ methods to manage this class with context managers
+	def __enter__(self):
+
+		self.conn = sql.connect(self.path)
+
+		# create a DataFrame with the same structure of the corresponding database
+		self.df = {}
+
+		self.df["Curve"] = pd.read_sql("Curve", self.conn)
+
+		self.df["Parameter"] = pd.read_sql("Parameter", self.conn)
+
+		self.df["VGP_Data"] = pd.read_sql("VGP_Data", self.conn)
+
+		self.df["VGP_Value_Double"] = pd.read_sql("VGP_Value_Double", self.conn)
+
+		self.df["VGP_Value_Int"] = pd.read_sql("VGP_Value_Int", self.conn)
+
+		self.df["VGP_Value_FunctionD"] = pd.read_sql("VGP_Value_FunctionD", self.conn)
+
+		return self
+
+
+	def __exit__(self, exc_class, exc, traceback):
+
+		print(f'{exc_type, exc_val, exc_tb}')
+
+		self.conn.commit()
+
+		self.conn.close()
 
 	Parameter_table = 'Parameter'
 
