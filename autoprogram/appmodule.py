@@ -21,8 +21,8 @@ pd.options.mode.chained_assignment = None  # default='warn'
 class Initialize(object):
 
 	# Get the family names from the family directories inside the master programs directory
-	@classmethod
-	def get_fam_names(cls):
+	@staticmethod
+	def get_fam_names():
 
 		try:
 
@@ -34,14 +34,12 @@ class Initialize(object):
 
 
 	# Get common data dependent on the chosen family
-	@classmethod
-	def get_fam_dependent_vars(cls):
+	@staticmethod
+	def get_fam_dependent_vars():
 
 		# assign this global variables after pushing the confirm button and not while starting the application  (even if it doesn't depend on the family choice),
 		# otherwise a wrong master programs directory path would make the application crash!!!
-		common.Variables.values_database_wb = wbm.WorkBook(Path(common.Variables.master_progs_dir / common.Variables.values_database_wb_filename))
-
-		common.Variables.values_database_sh = common.Variables.values_database_wb.wb[common.Variables.database_sh_name] # database sheet selection, it's a DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
+	
 
 		# get family directory
 		fam_prog_dir = Path(common.Variables.master_progs_dir/common.Variables.fam_name)

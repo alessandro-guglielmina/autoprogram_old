@@ -3,57 +3,47 @@ import os
 import numpy as np
 import pandas as pd
 
+
 from autoprogram import settingsmodule as sm
 from autoprogram import wbmodule as wbm
 
 
-# Common variables namespace
-class Variables(object):
+copyright_header = 'AutoProgram.\nCopyright \xc2\xa9 2020 Guglielmina Alessandro. All rights reserved.\n'
 
-	copyright_header = 'AutoProgram.\nCopyright \xc2\xa9 2020 Guglielmina Alessandro. All rights reserved.\n'
+config_file_wb_filename = 'configuration file.xlsx'
 
-	values_database_wb_filename = 'values database.xlsx'
+diam_name_sh_name = 'diameter name'
 
-	database_sh_name ='database'
+input_vals_sh_name = 'input values'
 
-	config_file_wb_filename = 'configuration file.xlsx'
+rel_vals_sh_name = 'related values'
 
-	diam_name_sh_name = 'diameter name'
+funct_vals_1_sh_name = 'function values 1'
 
-	config_vals_sh_name = 'configuration values'
+funct_vals_2_sh_name = 'function values 2'
 
-	funct_vals_1_sh_name = 'function values 1'
-	
-	funct_vals_2_sh_name = 'function values 2'
+vgp_suffix = '.vgp'
 
-	vgp_suffix = '.vgp'
+separator = '-'
 
-	drill_diam_addr = 'Rollomatic.LibCurve.Data.Curves.ToolProfileCurve-D0'
+# settings file name
+settings_filename = sm.settings_filename # settings path with respect to the project root
 
-	separator = '-'
+# work directories section
+work_directories_section = sm.work_directories_section
 
-	# settings file name
-	settings_filename = sm.settings_filename # settings path with respect to the project root
+# master programs directory variable in the .ini file
+master_progs_dir_var = sm.master_progs_dir_var
 
-	# work directories section
-	work_directories_section = sm.work_directories_section
+# result program directory variable in the .ini file
+res_progs_dir_var = sm.res_progs_dir_var
 
-	# master programs directory variable in the .ini file
-	master_progs_dir_var = sm.master_progs_dir_var
+# get the string paths from the settings module
+master_progs_dir_path = sm.master_progs_dir_path
 
-	# result program directory variable in the .ini file
-	res_prog_dir_var = sm.res_prog_dir_var
+res_progs_dir_path = sm.res_progs_dir_path
 
-	# get the string paths from the settings module
-	master_progs_dir_path = sm.master_progs_dir_path
+# declare master and result programs directories as windows paths
+master_progs_dir = Path(master_progs_dir_path)
 
-	res_prog_dir_path = sm.res_prog_dir_path
-
-	# declare master and result programs directories as windows paths
-	master_progs_dir = Path(master_progs_dir_path)
-
-	res_prog_dir = Path(res_prog_dir_path)
-
-	# values_database_wb = wbm.WorkBook(Path(master_progs_dir / values_database_wb_filename))
-
-	# values_database_sh = list(values_database_wb.wb.values())[0] # first wb sheet selection, it's a DataFrame containing all the recorded values information (val_name, val_descr, val_addr)
+res_progs_dir = Path(res_progs_dir_path)
