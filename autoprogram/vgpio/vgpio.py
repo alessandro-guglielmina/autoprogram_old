@@ -4,26 +4,33 @@ import pandas as pd
 from pathlib import Path
 
 
-TABLE_NAMES = ("Curve", "Parameter", "VGP_Data", "VGP_Value_Double", "VGP_Value_Int", "VGP_Value_FunctionD")
+class TableInfo(object):
+	"""
+	This class stores information about table inside the .vgp file
+	"""
+	def __init__(self, _name, _id_col, _val_col, _sect_perc_col=None):
+		self.name = _name
+		self.id_col = _id_col
+		self.val_col = _val_col
+		self.sect_perc_col = _sect_perc_col
 
+
+CURVE = TableInfo("Curve",  "CU_Id", "CU_Type")
+PARAMETER = TableInfo("Parameter", "PA_Id", "PA_Value")
+VGP_DATA = TableInfo("VGP_Data", "ID", "PartialFullname")
+VGP_VALUE_DOUBLE = TableInfo("VGP_Value_Double", "D_Id", "D_Value")
+VGP_VALUE_FUNCTIOND = TableInfo("VGP_Value_FunctionD", "D_Id", "D_Value", _sect_perc_col="D_Parameter")
+VGP_VALUE_INT = TableInfo("VGP_Value_Int", "D_Id", "D_Value")
+TABLES = (CURVE, PARAMETER, VGP_DATA, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND, VGP_VALUE_INT)
 VGPIO_MODULE_PATH = Path(__file__) # vgpio.py (this module) path
-
 VGPIO_PACKAGE_PATH = VGPIO_MODULE_PATH.parent # directory containing vgpio.py
-
 ADDR_MAP_FILENAME = "address mapper.xlsx"
-
 ADDR_MAP_PATH = VGPIO_PACKAGE_PATH.joinpath(ADDR_MAP_FILENAME) # the file "address mapper.xlsx" is always read from the same directory of the vgpio.py module (this module)
-
 ADDR_MAP_SHEET_NAME = "address mapper"
-
 try:
-
 	ADDR_MAP_DF = pd.read_excel(ADDR_MAP_PATH, sheet_name = ADDR_MAP_SHEET_NAME, dtype=str)
-
 except FileNotFoundError:
-
  	raise ValueError(f"No such an address mapper file: {ADDR_MAP_FILENAME}")
-
 SEPARATOR = "."
 
 
@@ -31,73 +38,57 @@ class VgpProgram(object):
 	"""
 	This class is an I/O interface to the VGPro program
 	"""
-	
 	def __init__(self, path):
-
 		self.path = path
-
 
 	# __enter__ and __exit__ methods needed to use context managers
 	def __enter__(self):
-
 		self.con = sql.connect(self.path)
-
-		self.get_vgp_dict()
-
-		self.set_addr_idx()
-
+		self.vgp_read()
 		return self
 
-
 	def __exit__(self, exc_class, exc, traceback):
-
 		# write DataFrame values into the .vgp file
-		for table_name in TABLE_NAMES:
-
-			self.vgp_dict[table_name].to_sql(table_name, self.con, if_exists='replace', index=False)
-
+		self.vgp_write()
 		self.con.commit()
-
 		self.con.close()
 
-
-	def get_vgp_dict(self):
+	def read_source_db(self):
 		"""
 		This method read the specified database tables and write them into corresponding pd.DataFrame object,
 		all of those are wrapped into the dictionary self.vgp_dict
 		"""
-
 		self.vgp_dict = {}
-
-		for table_name in TABLE_NAMES:
-
-			self.vgp_dict[table_name] = pd.read_sql(f"SELECT * FROM {table_name}", self.con)
-
-		# delete additional characters in Parameter table and cast as float
-		cast_param_vals = self.vgp_dict["Parameter"]["PA_Value"].str.rstrip(" mm°").astype("float64")
-
-		self.vgp_dict["Parameter"]["PA_Value"] = cast_param_vals
-
-
+		for table in TABLES:
+			self.vgp_dict[table.name] = pd.read_sql(f"SELECT * FROM {table.name}", self.con) # additional characters in the PA_Value column in the Parameter table (" ", "°" and "mm") have already been deleted and values cast to float64
+	
+	def scalars_to_array(self):
+		"""
+		The values in the val_col columns of each DataFRame are set to be arrays in order to deal with consistent data formats;
+		in the VGP_Value_FunctionD DataFrame all the columns but the id_col are set to be arrays, as not only the val_col is meant to represent arrays;
+		the id_col is left as scalr since it's an argument for queries dealing with scalar values
+		"""
+		for table in TABLES:
+			if table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND, VGP_VALUE_INT):
+				if table != VGP_VALUE_FUNCTIOND:
+					# For all the tables containing values but VGP_Value_FunctionD, the values are set to be arrays, other columns are not changed
+					self.vgp_dict[table.name][table.val_col] = self.vgp_dict[table.name][table.val_col].apply(lambda x: np.asarray([x]))
+				else:
+					# All the columns in VGP_Value_FunctionD are set to arrays, grouped by the D_Id column
+					self.vgp_dict[table.name] = self.vgp_dict[table.name].groupby([table.id_col]).agg(lambda series_gr_by: series_gr_by.array).reset_index()
+					
 	def elem_wise_query(self, _id, df, id_col, res_col,):
 		"""
 		This method returns a single result value from a query; the arguments are: self, the id (single value), the DataFrame (df), the id column (id_col)
 		and the result value column (res_col), it returns a single value as well. This function combined with pd.apply() method performs element-wise queries.
 		_id is the first positional argument because corresponds to the series elements automatically passed in by the pd.apply() method
 		"""
-
 		filt = (df[id_col] == _id)
-
 		try:
-
 			return  df[filt].iloc[0].at[res_col]
-
 		# if the query doesn't return anything, the result is set to np.nan
 		except IndexError:
-
 			return np.nan
-
-
 
 	def get_val_addr(self, table_name):
 		"""
@@ -105,15 +96,9 @@ class VgpProgram(object):
 		in order to access them more easily by value addresses. The argument table_name is a string (e.g. "VGP_Value_Double"), while the output is a pd.Series containing
 		all the addresses of the specified table (i.e. data type)
 		"""
-
 		val_addr_ids = self.vgp_dict[table_name]["D_Id"]
-
 		val_addr = val_addr_ids.apply(self.elem_wise_query, args=(self.vgp_dict["VGP_Data"], "ID", "PartialFullname"))
-
-		# names = addr.apply(self. elem_wise_query, args=(ADDR_MAP_DF, "PartialFullname", "RConnectId"))
-
 		val_addr.rename("address", inplace=True)
-
 		return val_addr
 
 
@@ -123,15 +108,11 @@ class VgpProgram(object):
 		in order to access them more easily by value addresses. The output is a pd.Series containing
 		Parameter addresses, that are ustom strings acting as unique identifiers
 		"""
-
 		param_val_names = self.vgp_dict["Parameter"]["PA_Name"]
-
 		param_curve_ids = param_val_names.apply(self.elem_wise_query, args=(self.vgp_dict["Parameter"], "PA_Name", "PA_CurveId"))
-
 		param_curve_types = param_curve_ids.apply(self.elem_wise_query, args=(self.vgp_dict["Curve"], "CU_Id", "CU_Type"))
-
 		param_addr = param_curve_types.str.cat(param_val_names, sep = SEPARATOR)
-
+		param_addr.rename("address", inplace=True)
 		return param_addr
 
 
@@ -139,118 +120,173 @@ class VgpProgram(object):
 		"""
 		This method set the index to all the value DataFrames (not Parameter DataFrame!!!) by applying self.get_val_addr()
 		"""
-
 		for table_name in ("VGP_Value_Double", "VGP_Value_Int", "VGP_Value_FunctionD"):
-
 			self.vgp_dict[table_name].set_index(self.get_val_addr(table_name), inplace=True)
-
 
 	def set_param_addr_idx(self):
 		"""
 		This method set the index to the Parameter DataFrame by applying self.get_param_addr()
 		"""
-
 		self.vgp_dict["Parameter"].set_index(self.get_param_addr(), inplace=True)
-
 
 	def set_addr_idx(self):
 		"""
 		This method wraps self.set_val_addr_idx() and self.set_param_addr_idx() together
 		"""
-
 		self.set_val_addr_idx()
-
 		self.set_param_addr_idx()
 
+	def vgp_read(self):
+		"""
+		This method wraps the three methods to setup the self.vgp_dict attribute, the tables dictionary, so that it's easier to work with
+		"""
+		self.read_source_db()
+		self.scalars_to_array()
+		self.set_addr_idx()
 
-	def val_name_to_addr(self, val_names):
+	def array_to_scalars(self):
+		"""
+		This method reset the original DataFrame formats in order to be written in the .vgp file
+		"""
+		for table in TABLES:
+			if table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND, VGP_VALUE_INT):
+				if table != VGP_VALUE_FUNCTIOND:
+					# For all the tables containing values but VGP_Value_FunctionD, the arrays in the val_col are reset to be scalar values, other columns are not changed
+					self.vgp_dict[table.name][table.val_col] = self.vgp_dict[table.name][table.val_col].apply(lambda x: x[0])
+				else:
+					df_temp = self.vgp_dict[table.name] # assign to VGP_Value_FunctionD DataFrame
+					df_temp.set_index([self.vgp_dict[table.name].index, table.id_col], inplace=True) # set current index and D_Id column as index, so they are duplicated while stacking
+					df_temp = df_temp.apply(lambda x: x.apply(pd.Series).stack()) # inner apply() iterates through each column element (each one is a np.array), outer apply() iterates over each DataFrame column
+					df_temp.reset_index(level=table.id_col, inplace=True) # move the id_col from index to actual DataFrame column
+					df_temp = df_temp.droplevel(-1) # drop the index level coming from index duplication (populated by 0, 1, ...)
+					self.vgp_dict[table.name] = df_temp
+
+	def write_source_db(self):
+		"""
+		Description
+		"""
+		for table in TABLES:
+			self.vgp_dict[table.name].to_sql(table.name, self.con, if_exists='replace', index=False)
+
+	def vgp_write(self):
+		"""
+		This method reset the tables so that they can be written in the db as the original ones, then they are written in the source db itself
+		"""
+		self.array_to_scalars()
+		self.write_source_db()
+		delattr(self, "vgp_dict")
+
+	def val_names_to_addr(self, val_names):
 		"""
 		This method convert the value names contained in the val_names Series into their correspondent address by means of the ADDR_MAP_DF,
 		the DataFrame corresponding to the address mapper workbook
 		"""
-
 		val_addr = val_names.apply(self.elem_wise_query, args=(ADDR_MAP_DF, "val_name", "val_addr"))
-
-		return val_addr
-
+		mapped_val_names_filt = val_addr.notna()
+		if mapped_val_names_filt.all():
+			return val_addr
+		else:
+			not_mapped_val_names = val_names[~mapped_val_names_filt]
+			raise ValueError(f"Not mapped value names: {not_mapped_val_names.to_list()}")
 
 	def is_param(self, names):
 		"""
 		This method takes a Series of names as argument and returns a boolean filter (pd.Series) that is True for those values being parameters
-		(returned as np.nan from the self.val_name_to_addr() method)
+		(not in the address mapper workbook)
 		"""
-
-		is_param_filt = self.val_name_to_addr(names).isna()
-
+		is_param_filt = ~names.isin(ADDR_MAP_DF.val_name)
 		return is_param_filt
 
 
 	def is_val(self, names):
 		"""
 		This method takes a Series of names as argument and returns a boolean filter (pd.Series) that is True for those values being values
-		(returned as strings from the self.val_name_to_addr() method)
+		(in the address mapper workbook)
 		"""
-
-		is_val_filt = self.val_name_to_addr(names).notna()
-
+		is_val_filt = names.isin(ADDR_MAP_DF.val_name)
 		return is_val_filt
 
 
 	def elem_wise_param_addr_build(self, param_name):
 		"""
-		This method builds the parameter address (unique identifier) from the parameter name, the argument is a string value; it has to be used with
-		the pd.apply() method in order to convert eah name in the Series into its correspondent address
+		This method builds the parameter address (custom string collecting the curve type and the parameter name, acting as unique identifier)
+		from the parameter name (RConnect id, i.e. a string value); it has to be used with the pd.apply() method in order to convert eah name
+		in the Series into its correspondent address
 		"""
-
 		split_param_name = param_name.split(SEPARATOR)
-
 		if split_param_name[0] == "Tool":
-
 			param_addr = "Rollomatic.LibCurve.Data.Curves.ToolProfileCurve" + SEPARATOR + split_param_name[-1]
-
 			return param_addr
-
 		elif split_param_name[0] == "Blank":
-
 			param_addr = "Rollomatic.LibCurve.Data.Curves.BlankProfileCurve" + SEPARATOR + split_param_name[-1]
-
 			return param_addr
-
 		else:
-
 			raise ValueError(f"No such a parameter name: {param_name}")
 
-
-
-
-	def param_name_to_addr(self, param_names):
+	def param_names_to_addr(self, param_names):
 		"""
 		This method takes a pd.Series as argument with the selected parameter names and returns a pd.Series of the same length with the
 		correspondent parameter addresses (unique identifiers)
 		"""
-
 		param_addr = param_names.apply(self.elem_wise_param_addr_build)
-
 		return param_addr
 
-
-	def name_to_addr(self, names):
-
+	def names_to_addr(self, names):
+		"""
+		This method takes a pd.Series of names as argument and return a pd.Series of corresponding addresses
+		"""
 		is_param_filt = self.is_param(names)
-
 		is_val_filt = self.is_val(names)
-
-		param_names = names[is_param_filt] # applying a pd.Series boolean filter to a pd.Series returns a pd.Series as well
-
+		param_names = names[is_param_filt] # applying a pd.Series boolean filter to a pd.Series returns a pd.Series as well with only those elements corresponding to True values
 		val_names = names[is_val_filt]
-
 		addr = pd.Series([np.nan for i in range(names.size)], dtype=object)
-
-		addr[is_param_filt] = self.param_name_to_addr(param_names)
-
-		addr[is_val_filt] = self.val_name_to_addr(val_names)
-
+		addr[is_param_filt] = self.param_names_to_addr(param_names)
+		addr[is_val_filt] = self.val_names_to_addr(val_names)
 		return addr
+
+	def names_to_tables(self, names):
+		"""
+		This method takes a pd.Series of names as argument and return a pd.Series of corresponding table names
+		"""
+		addr = self.names_to_addr(names)
+		is_param_filt = self.is_param(names)
+		is_val_filt = self.is_val(names)
+		tables = pd.Series([np.nan for i in range(names.size)], dtype=object)
+		tables[is_param_filt] = addr[is_param_filt].apply(lambda x: "Parameter")
+		tables[is_val_filt] = addr[is_val_filt].apply(self.elem_wise_query, args=(self.vgp_dict["VGP_Data"], "PartialFullname", "VGP_Value_Type"))
+		not_in_prog_names_filt = tables.isna()
+		if not_in_prog_names_filt.any():
+			not_in_prog_names = names[not_in_prog_names_filt]
+			raise ValueError(f"Value names not in the program: {not_in_prog_names.to_list()}")
+		else:
+			return tables
+
+	def names_to_query_args_df(self, names):
+		"""
+		Description
+		"""
+		addr = self.names_to_addr(names)
+		tables = self.names_to_tables(names)
+		qry_args_df = pd.DataFrame({"table": tables, "addr": addr})
+		return qry_args_df
+
+	def row_wise_qry(self, row):
+		"""
+		Description
+		"""
+		pass
+
+	def __getitem__(self, names):
+          """
+          Description
+          """
+          nan_list = [np.nan for i in range(names.size)]
+          val_df = pd.DataFrame({"sect_perc": nan_list, "val": nan_list})
+          addr = self.names_to_addr(names)
+          tables = self.names_to_tables(names)
+          vals = self.vgp_dict[tables]
+
+
 
 
 	# Parameter_table_names = 'Parameter'
