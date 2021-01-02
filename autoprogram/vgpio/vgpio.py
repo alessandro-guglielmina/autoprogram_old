@@ -2,6 +2,7 @@ import sqlite3 as sql
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import copy
 
 VGPIO_MODULE_PATH = Path(__file__) # vgpio.py (this module) path
 VGPIO_PACKAGE_PATH = VGPIO_MODULE_PATH.parent # directory containing vgpio.py
@@ -62,8 +63,11 @@ class VgpProgram(object):
 		"""
 		self.vgp_dict = {}
 		for table_name, table in ALL_TABLES.iterrows():
-			self.vgp_dict[table.name] = pd.read_sql(f"SELECT * FROM {table.name}", self.con) # additional characters in the PA_Value column in the Parameter table (" ", "°" and "mm") have already been deleted and values cast to float64
-	
+			self.vgp_dict[table.name] = pd.read_sql(f"SELECT * FROM {table.name}", self.con)
+			# Additional characters in the PA_Value column in the Parameter table (" ", "°" and "mm") have to be deleted and values cast to float64
+			if table.name == PARAMETER.name:
+				self.vgp_dict[table.name][PARAMETER.val_col] = self.vgp_dict[table.name][PARAMETER.val_col].str.rstrip(" °mm").astype("float64")
+
 	def scalars_to_array(self):
 		"""
 		The values in the val_col columns of each DataFRame are set to be arrays in order to deal with consistent data formats;
@@ -171,12 +175,14 @@ class VgpProgram(object):
 				# For other tables, the arrays in the val_col are reset to be scalar values, other columns are not changed
 				self.vgp_dict[table.name][table.val_col] = self.vgp_dict[table.name][table.val_col].apply(lambda x: x[0])
 				
-
 	def write_source_db(self):
 		"""
 		Description
 		"""
 		for table_name, table in RW_TABLES.iterrows():
+			# Reset Parameter values to be string in order to not alter the original .vgp file data types
+			if table.name == PARAMETER.name:
+				self.vgp_dict[table.name][PARAMETER.val_col] = self.vgp_dict[table.name][table.val_col].astype("str")
 			self.vgp_dict[table.name].to_sql(table.name, self.con, if_exists='replace', index=False)
 
 	def vgp_write(self):
@@ -225,6 +231,44 @@ class VgpProgram(object):
 		param_addr = param_names.apply(self.elem_wise_param_addr_build)
 		return param_addr
 
+	def names_to_addr(self, names, is_param_filt, is_val_filt):
+		"""
+		Pipeline 1st method: it takes a pd.Series of names, parameter and value boolean filters as arguments
+		and returns a pd.Series of corresponding addresses
+		"""
+		param_names = names[is_param_filt] # applying a pd.Series boolean filter to a pd.Series returns a pd.Series as well with only those elements corresponding to True values
+		val_names = names[is_val_filt]
+		addr = pd.Series([np.nan for i in range(names.size)], dtype=object)
+		addr[is_param_filt] = self.param_names_to_addr(param_names)
+		addr[is_val_filt] = self.val_names_to_addr(val_names)
+		return addr
+
+	def addr_to_tables(self, addr, is_param_filt, is_val_filt):
+		"""
+		Pipeline 2nd method: it takes a pd.Series of addresses, a pd.Series of names parameter and value boolean filters
+		as arguments and returns a pd.Series of corresponding table names
+		"""
+		tables = pd.Series([np.nan for i in range(addr.size)], dtype=object)
+		tables[is_param_filt] = addr[is_param_filt].apply(lambda x: PARAMETER.name)
+		table_from_val_addr_qry = lambda val_addr: self.elem_wise_query(self.vgp_dict[VGP_DATA.name], VGP_DATA.val_col, val_addr, "VGP_Value_Type")
+		tables[is_val_filt] = addr[is_val_filt].apply(table_from_val_addr_qry)
+		not_in_prog_addr_filt = tables.isna()
+		if not_in_prog_addr_filt.any():
+			not_in_prog_addr = addr[not_in_prog_addr_filt]
+			raise ValueError(f"Value addresses not in the program: {not_in_prog_addr.to_list()}")
+		else:
+			return tables
+
+	def names_to_query_args_df(self, names, is_param_filt, is_val_filt):
+		"""
+		This method takes a pd.Series of names and value boolean filters as arguments and returns a pd.DataFrame of
+		corresponding query arguments (tables and addresses)
+		"""
+		addr = self.names_to_addr(names, is_param_filt, is_val_filt)
+		tables = self.addr_to_tables(addr, is_param_filt, is_val_filt)
+		qry_args_df = pd.DataFrame({"table": tables, "addr": addr})
+		return qry_args_df
+
 	def is_param(self, names):
 		"""
 		This method takes a Series of names as argument and returns a boolean filter (pd.Series) that is True for those values being parameters
@@ -241,60 +285,44 @@ class VgpProgram(object):
 		is_val_filt = names.isin(ADDR_MAP_DF.val_name)
 		return is_val_filt
 
-	def names_to_addr(self, names):
+	def vals_qry(self, qry_args):
 		"""
-		Pipeline 1st method: it takes a pd.Series of names as argument and returns a pd.Series of corresponding addresses
+		For Parameter values duplicates must be dropped in order to return a single value per label
 		"""
-		param_names = names[self.is_param_filt] # applying a pd.Series boolean filter to a pd.Series returns a pd.Series as well with only those elements corresponding to True values
-		val_names = names[self.is_val_filt]
-		addr = pd.Series([np.nan for i in range(names.size)], dtype=object)
-		addr[self.is_param_filt] = self.param_names_to_addr(param_names)
-		addr[self.is_val_filt] = self.val_names_to_addr(val_names)
-		return addr
-
-	def addr_to_tables(self, addr):
-		"""
-		Pipeline 2nd method: it takes a pd.Series of addresses as argument and returns a pd.Series of corresponding table names
-		"""
-		tables = pd.Series([np.nan for i in range(addr.size)], dtype=object)
-		tables[self.is_param_filt] = addr[self.is_param_filt].apply(lambda x: PARAMETER.name)
-		table_from_val_addr_qry = lambda val_addr: self.elem_wise_query(self.vgp_dict[VGP_DATA.name], VGP_DATA.val_col, val_addr, "VGP_Value_Type")
-		tables[self.is_val_filt] = addr[self.is_val_filt].apply(table_from_val_addr_qry)
-		not_in_prog_addr_filt = tables.isna()
-		if not_in_prog_addr_filt.any():
-			not_in_prog_addr = addr[not_in_prog_addr_filt]
-			raise ValueError(f"Value addresses not in the program: {not_in_prog_addr.to_list()}")
+		if qry_args.table != PARAMETER.name:
+			val = self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
 		else:
-			return tables
+			no_dupl_param_df = self.vgp_dict[qry_args.table][~self.vgp_dict[qry_args.table].index.duplicated(keep='first')]
+			val = no_dupl_param_df.loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
+		return val
 
-	def names_to_query_args_df(self, names):
+	def sect_percs_qry(self, qry_args):
 		"""
-		This method takes a pd.Series of names as argument and returns a pd.DataFrame of corresponding query arguments (tables and addresses)
+		Description
 		"""
-		addr = self.names_to_addr(names)
-		tables = self.addr_to_tables(addr)
-		qry_args_df = pd.DataFrame({"table": tables, "addr": addr})
-		# vals_query = lambda qry_args: self.vgp_dict[qry_args.table].loc[qry_args.addr, val_col]
-		# vals = qry_args_df.apply(lambda row: self.elem_wise_query())
-		return qry_args_df
-
-	def vals_query(self, qry_args):
-		pass
-
+		try:
+			sect_perc = self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
+		except KeyError:
+			sect_perc = np.nan
+		return sect_perc
 
 	def __getitem__(self, names):
 		"""
 		Description
 		"""
-		self.is_param_filt = self.is_param(names)
-		self.is_val_filt = self.is_val(names)
-		qry_args_df = self.names_to_query_args_df(names)
-		vals_query = lambda qry_args: self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
-		#vals_query = lambda qry_args: print(qry_args)
-		vals = qry_args_df.apply(vals_query, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
+		names = pd.Series(names)
+		names_len = names.size
+		is_param_filt = self.is_param(names)
+		is_val_filt = self.is_val(names)
+		qry_args_df = self.names_to_query_args_df(names, is_param_filt, is_val_filt)
+		qry_args_df = qry_args_df[~qry_args_df.index.duplicated(keep='first')] # delete duplicates due to Parameter values
+		#vals_qry = lambda qry_args: self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
+		vals = qry_args_df.apply(self.vals_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
+		sect_percs = qry_args_df.apply(self.sect_percs_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
 		#sect_percs_query = lambda qry_args: self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
-		del self.is_param_filt, self.is_val_filt
-		return vals
+		del is_param_filt, is_val_filt
+		data = pd.DataFrame({"sect_perc": sect_percs, "val": vals}).set_index(names)
+		return data
 
 
 
