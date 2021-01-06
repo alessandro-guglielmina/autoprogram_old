@@ -41,6 +41,7 @@ class VgpProgram(object):
 	This class is an I/O interface to the VGPro program (version 1.29)
 	"""
 	def __init__(self, path):
+		# path: .vgp file path
 		self.path = path
 
 	# __enter__ and __exit__ methods needed to use context managers
@@ -166,7 +167,7 @@ class VgpProgram(object):
 				# VGP_Value_FunctionD formatting
 				df_temp = self.vgp_dict[table.name] # assign to VGP_Value_FunctionD DataFrame
 				df_temp.set_index([self.vgp_dict[table.name].index, table.id_col], inplace=True) # set current index and D_Id column as index, so they are duplicated while stacking
-				df_temp = df_temp.apply(lambda x: x.apply(pd.Series).stack()) # inner apply() iterates through each column element (each one is a np.array), outer apply() iterates over each DataFrame column
+				df_temp = df_temp.apply(lambda x: x.apply(pd.Series).stack()) # x is a DataFrame corresponding to a df_temp column, x.apply(pd.Series) is a column DataFrame whose each element (np.array) has been transformed into a pd.Series
 				df_temp.reset_index(level=table.id_col, inplace=True) # move the id_col from index to actual DataFrame column
 				df_temp = df_temp.droplevel(-1) # drop the index level coming from index duplication (populated by 0, 1, ...)
 				self.vgp_dict[table.name] = df_temp
@@ -190,7 +191,7 @@ class VgpProgram(object):
 		This method reset the tables so that they can be written in the db as the original ones, then they are written in the source db itself
 		"""
 		self.array_to_scalars()
-		self.write_source_db()
+		 # self.write_source_db()
 		delattr(self, "vgp_dict")
 
 	def val_names_to_addr(self, val_names):
@@ -285,20 +286,21 @@ class VgpProgram(object):
 		is_val_filt = names.isin(ADDR_MAP_DF.val_name)
 		return is_val_filt
 
-	def vals_qry(self, qry_args):
+	def get_vals_qry(self, qry_args):
 		"""
-		For Parameter values duplicates must be dropped in order to return a single value per label
+		Return Value type values
 		"""
 		if qry_args.table != PARAMETER.name:
 			val = self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
+		# For Parameter values duplicates must be dropped in order to return a single value per label
 		else:
 			no_dupl_param_df = self.vgp_dict[qry_args.table][~self.vgp_dict[qry_args.table].index.duplicated(keep='first')]
 			val = no_dupl_param_df.loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
 		return val
 
-	def sect_percs_qry(self, qry_args):
+	def get_sect_percs_qry(self, qry_args):
 		"""
-		Description
+		Return Parameter type values
 		"""
 		try:
 			sect_perc = self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
@@ -308,24 +310,47 @@ class VgpProgram(object):
 
 	def __getitem__(self, names):
 		"""
-		Description
+		This method allows to get elements by indexing, it can take strings and array-like of strings as arguments
+		"""
+		names = pd.Series(names)
+		names_len = names.size
+		# Get the boolean filters relative to those names being Parameter type and those being Value type
+		# (constant through the whole __getitem__ method)
+		is_param_filt = self.is_param(names)
+		is_val_filt = self.is_val(names)
+		# Get a DataFrame with two columns, one is for tables ("table" column) and one for addresses ("addr" column)
+		qry_args_df = self.names_to_query_args_df(names, is_param_filt, is_val_filt)
+		qry_args_df = qry_args_df[~qry_args_df.index.duplicated(keep='first')] # delete duplicates due to Parameter values
+		# Iterate over the two columns: each qry_args_df row is passed as argument to the function inside .apply() (self.get_vals_qry and self.get_sect_percs_qry,
+		# each taking the arguments qry_args.addr and qry_args.table)
+		vals = qry_args_df.apply(self.get_vals_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
+		sect_percs = qry_args_df.apply(self.get_sect_percs_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
+		del is_param_filt, is_val_filt
+		data = pd.DataFrame({"sect_perc": sect_percs, "val": vals}).set_index(names)
+		return data
+
+	def set_vals_qry(self, qry_args_value):
+		"""
+		EXCEPTIONS TO BE ADDED!!!
+		"""
+		# print(self.vgp_dict[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]])
+		# print(qry_args_value.val)
+		# input("pause")
+		self.vgp_dict[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]] = [qry_args_value.val]
+		self.vgp_dict[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "sect_perc_col"]] = [qry_args_value.sect_perc]
+
+	def __setitem__(self, names, values):
+		"""
+		EXCEPTIONS TO BE ADDED!!!
 		"""
 		names = pd.Series(names)
 		names_len = names.size
 		is_param_filt = self.is_param(names)
 		is_val_filt = self.is_val(names)
 		qry_args_df = self.names_to_query_args_df(names, is_param_filt, is_val_filt)
-		qry_args_df = qry_args_df[~qry_args_df.index.duplicated(keep='first')] # delete duplicates due to Parameter values
-		#vals_qry = lambda qry_args: self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
-		vals = qry_args_df.apply(self.vals_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
-		sect_percs = qry_args_df.apply(self.sect_percs_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
-		#sect_percs_query = lambda qry_args: self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
-		del is_param_filt, is_val_filt
-		data = pd.DataFrame({"sect_perc": sect_percs, "val": vals}).set_index(names)
-		return data
-
-
-
+		qry_args_df = qry_args_df[~qry_args_df.index.duplicated(keep='first')]
+		qry_args_values_df = pd.concat([qry_args_df, values], axis=1)
+		qry_args_values_df.apply(self.set_vals_qry, axis=1)
 
 	# Parameter_table_names = 'Parameter'
 
