@@ -47,29 +47,29 @@ class VgpProgram(object):
 	# __enter__ and __exit__ methods needed to use context managers
 	def __enter__(self):
 		self.con = sql.connect(self.path)
-		self.vgp_read()
+		self.df_setup()
 		return self
 
 	def __exit__(self, exc_class, exc, traceback):
 		# write DataFrame values into the .vgp file
-		self.vgp_write()
+		self.df_commit()
 		self.con.commit()
 		self.con.close()
 		pass
 
-	def read_source_db(self):
+	def df_setup(self):
 		"""
 		This method read the specified database tables and write them into corresponding pd.DataFrame object,
-		all of those are wrapped into the dictionary self.vgp_dict
+		all of those are wrapped into the dictionary self.df
 		"""
-		self.vgp_dict = {}
+		self.df = {}
 		for table_name, table in ALL_TABLES.iterrows():
-			self.vgp_dict[table.name] = pd.read_sql(f"SELECT * FROM {table.name}", self.con)
+			self.df[table.name] = pd.read_sql(f"SELECT * FROM {table.name}", self.con)
 			# Additional characters in the PA_Value column in the Parameter table (" ", "°" and "mm") have to be deleted and values cast to float64
 			if table.name == PARAMETER.name:
-				self.vgp_dict[table.name][PARAMETER.val_col] = self.vgp_dict[table.name][PARAMETER.val_col].str.rstrip(" °mm").astype("float64")
+				self.df[table.name][PARAMETER.val_col] = self.df[table.name][PARAMETER.val_col].str.rstrip(" °mm").astype("float64")
 
-	def scalars_to_array(self):
+	def df_unstack(self):
 		"""
 		The values in the val_col columns of each DataFRame are set to be arrays in order to deal with consistent data formats;
 		in the VGP_Value_FunctionD DataFrame all the columns but the id_col are set to be arrays, as not only the val_col is meant to represent arrays;
@@ -78,17 +78,17 @@ class VgpProgram(object):
 		for table_name, table in RW_TABLES.iterrows():
 			if table.name == VGP_VALUE_FUNCTIOND.name:
 				# All the columns in VGP_Value_FunctionD table are grouped by the D_Id column and values in other columns collected in pd.array objects
-				df_gr_by_temp = self.vgp_dict[table.name].groupby(table.id_col)
+				df_gr_by_temp = self.df[table.name].groupby(table.id_col)
 				df_temp = df_gr_by_temp.agg(pd.array)
 				df_temp.reset_index(inplace=True)
-				self.vgp_dict[table.name] = df_temp
+				self.df[table.name] = df_temp
 				del df_gr_by_temp, df_temp
 			else:
 				# For the other tables, only the val_col is set to be as np.array type (for value data types consistency), other columns are not changed, since they can be arguments for queries
-				self.vgp_dict[table.name][table.val_col] = self.vgp_dict[table.name][table.val_col].apply(lambda x: np.asarray([x]))
+				self.df[table.name][table.val_col] = self.df[table.name][table.val_col].apply(lambda x: np.asarray([x]))
 		
-					
-	def elem_wise_query(self, df, id_col, _id, res_col):
+	@staticmethod				
+	def elem_wise_query(df, id_col, _id, res_col):
 		"""
 		This method returns a single result value from a query; the arguments are: self, the id (single value), the DataFrame (df), the id column (id_col)
 		and the result value column (res_col), it returns a single value as well. This function combined with pd.apply() method performs element-wise queries.
@@ -96,7 +96,7 @@ class VgpProgram(object):
 		"""
 		filt = (df[id_col] == _id)
 		try:
-			return  df[filt].iloc[0].at[res_col]
+			return  df.loc[filt, res_col]
 		# if the query doesn't return anything, the result is set to np.nan
 		except IndexError:
 			return np.nan
@@ -107,8 +107,8 @@ class VgpProgram(object):
 		in order to access them more easily by value addresses. The argument table_name is a string (e.g. "VGP_Value_Double"), while the output is a pd.Series containing
 		all the addresses of the specified table (i.e. data type)
 		"""
-		val_addr_ids = self.vgp_dict[table_name][VGP_VALUE_DOUBLE.id_col] # equivalent to VGP_VALUE_FUNCTIOND.id_col or VGP_VALUE_INT.id_col
-		addr_qry = lambda _id: self.elem_wise_query(self.vgp_dict[VGP_DATA.name], VGP_DATA.id_col, _id, VGP_DATA.val_col)
+		val_addr_ids = self.df[table_name][VGP_VALUE_DOUBLE.id_col] # equivalent to VGP_VALUE_FUNCTIOND.id_col or VGP_VALUE_INT.id_col
+		addr_qry = lambda _id: self.elem_wise_query(self.df[VGP_DATA.name], VGP_DATA.id_col, _id, VGP_DATA.val_col)
 		val_addr = val_addr_ids.apply(addr_qry)
 		val_addr.rename("address", inplace=True)
 		return val_addr
@@ -120,10 +120,10 @@ class VgpProgram(object):
 		in order to access them more easily by value addresses. The output is a pd.Series containing
 		Parameter addresses, that are ustom strings acting as unique identifiers
 		"""
-		param_names = self.vgp_dict[PARAMETER.name]["PA_Name"]
-		param_curve_id_qry = lambda param_name: self.elem_wise_query( self.vgp_dict[PARAMETER.name], "PA_Name", param_name, "PA_CurveId")
+		param_names = self.df[PARAMETER.name]["PA_Name"]
+		param_curve_id_qry = lambda param_name: self.elem_wise_query( self.df[PARAMETER.name], "PA_Name", param_name, "PA_CurveId")
 		param_curve_ids = param_names.apply(param_curve_id_qry)
-		param_curve_type_qry = lambda curve_id: self.elem_wise_query( self.vgp_dict[CURVE.name], CURVE.id_col, curve_id, CURVE.val_col)
+		param_curve_type_qry = lambda curve_id: self.elem_wise_query( self.df[CURVE.name], CURVE.id_col, curve_id, CURVE.val_col)
 		param_curve_types = param_curve_ids.apply(param_curve_type_qry)
 		param_addr = param_curve_types.str.cat(param_names, sep = SEPARATOR)
 		param_addr.rename("address", inplace=True)
@@ -135,13 +135,13 @@ class VgpProgram(object):
 		This method set the index to all the value DataFrames (not Parameter DataFrame!!!) by applying self.get_val_addr()
 		"""
 		for table_name in ("VGP_Value_Double", "VGP_Value_Int", "VGP_Value_FunctionD"):
-			self.vgp_dict[table_name].set_index(self.get_val_addr(table_name), inplace=True)
+			self.df[table_name].set_index(self.get_val_addr(table_name), inplace=True)
 
 	def set_param_addr_idx(self):
 		"""
 		This method set the index to the Parameter DataFrame by applying self.get_param_addr()
 		"""
-		self.vgp_dict["Parameter"].set_index(self.get_param_addr(), inplace=True)
+		self.df["Parameter"].set_index(self.get_param_addr(), inplace=True)
 
 	def set_addr_idx(self):
 		"""
@@ -152,7 +152,7 @@ class VgpProgram(object):
 
 	def vgp_read(self):
 		"""
-		This method wraps the three methods to setup the self.vgp_dict attribute, the tables dictionary, so that it's easier to work with
+		This method wraps the three methods to setup the self.df attribute, the tables dictionary, so that it's easier to work with
 		"""
 		self.read_source_db()
 		self.scalars_to_array()
@@ -165,16 +165,16 @@ class VgpProgram(object):
 		for table_name, table in RW_TABLES.iterrows():
 			if table.name == VGP_VALUE_FUNCTIOND.name:
 				# VGP_Value_FunctionD formatting
-				df_temp = self.vgp_dict[table.name] # assign to VGP_Value_FunctionD DataFrame
-				df_temp.set_index([self.vgp_dict[table.name].index, table.id_col], inplace=True) # set current index and D_Id column as index, so they are duplicated while stacking
+				df_temp = self.df[table.name] # assign to VGP_Value_FunctionD DataFrame
+				df_temp.set_index([self.df[table.name].index, table.id_col], inplace=True) # set current index and D_Id column as index, so they are duplicated while stacking
 				df_temp = df_temp.apply(lambda x: x.apply(pd.Series).stack()) # x is a DataFrame corresponding to a df_temp column, x.apply(pd.Series) is a column DataFrame whose each element (np.array) has been transformed into a pd.Series
 				df_temp.reset_index(level=table.id_col, inplace=True) # move the id_col from index to actual DataFrame column
 				df_temp = df_temp.droplevel(-1) # drop the index level coming from index duplication (populated by 0, 1, ...)
-				self.vgp_dict[table.name] = df_temp
+				self.df[table.name] = df_temp
 				del df_temp
 			else:
 				# For other tables, the arrays in the val_col are reset to be scalar values, other columns are not changed
-				self.vgp_dict[table.name][table.val_col] = self.vgp_dict[table.name][table.val_col].apply(lambda x: x[0])
+				self.df[table.name][table.val_col] = self.df[table.name][table.val_col].apply(lambda x: x[0])
 				
 	def write_source_db(self):
 		"""
@@ -183,8 +183,8 @@ class VgpProgram(object):
 		for table_name, table in RW_TABLES.iterrows():
 			# Reset Parameter values to be string in order to not alter the original .vgp file data types
 			if table.name == PARAMETER.name:
-				self.vgp_dict[table.name][PARAMETER.val_col] = self.vgp_dict[table.name][table.val_col].astype("str")
-			self.vgp_dict[table.name].to_sql(table.name, self.con, if_exists='replace', index=False)
+				self.df[table.name][PARAMETER.val_col] = self.df[table.name][table.val_col].astype("str")
+			self.df[table.name].to_sql(table.name, self.con, if_exists='replace', index=False)
 
 	def vgp_write(self):
 		"""
@@ -192,7 +192,7 @@ class VgpProgram(object):
 		"""
 		self.array_to_scalars()
 		 # self.write_source_db()
-		delattr(self, "vgp_dict")
+		delattr(self, "df")
 
 	def val_names_to_addr(self, val_names):
 		"""
@@ -251,7 +251,7 @@ class VgpProgram(object):
 		"""
 		tables = pd.Series([np.nan for i in range(addr.size)], dtype=object)
 		tables[is_param_filt] = addr[is_param_filt].apply(lambda x: PARAMETER.name)
-		table_from_val_addr_qry = lambda val_addr: self.elem_wise_query(self.vgp_dict[VGP_DATA.name], VGP_DATA.val_col, val_addr, "VGP_Value_Type")
+		table_from_val_addr_qry = lambda val_addr: self.elem_wise_query(self.df[VGP_DATA.name], VGP_DATA.val_col, val_addr, "VGP_Value_Type")
 		tables[is_val_filt] = addr[is_val_filt].apply(table_from_val_addr_qry)
 		not_in_prog_addr_filt = tables.isna()
 		if not_in_prog_addr_filt.any():
@@ -291,10 +291,10 @@ class VgpProgram(object):
 		Return Value type values
 		"""
 		if qry_args.table != PARAMETER.name:
-			val = self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
+			val = self.df[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
 		# For Parameter values duplicates must be dropped in order to return a single value per label
 		else:
-			no_dupl_param_df = self.vgp_dict[qry_args.table][~self.vgp_dict[qry_args.table].index.duplicated(keep='first')]
+			no_dupl_param_df = self.df[qry_args.table][~self.df[qry_args.table].index.duplicated(keep='first')]
 			val = no_dupl_param_df.loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
 		return val
 
@@ -303,7 +303,7 @@ class VgpProgram(object):
 		Return Parameter type values
 		"""
 		try:
-			sect_perc = self.vgp_dict[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
+			sect_perc = self.df[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
 		except KeyError:
 			sect_perc = np.nan
 		return sect_perc
@@ -333,11 +333,11 @@ class VgpProgram(object):
 		"""
 		EXCEPTIONS TO BE ADDED!!!
 		"""
-		# print(self.vgp_dict[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]])
+		# print(self.df[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]])
 		# print(qry_args_value.val)
 		# input("pause")
-		self.vgp_dict[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]] = [qry_args_value.val]
-		self.vgp_dict[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "sect_perc_col"]] = [qry_args_value.sect_perc]
+		self.df[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]] = [qry_args_value.val]
+		self.df[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "sect_perc_col"]] = [qry_args_value.sect_perc]
 
 	def __setitem__(self, names, values):
 		"""
@@ -362,8 +362,8 @@ class VgpProgram(object):
 
 	# VGP_Value_FunctionD_table_names = 'VGP_Value_FunctionD'
 
-	# # this vgp_dictionary collect the column strucure of all the used TABLE_NAMES present in the VGP program
-	# table_names_col_vgp_dict = {
+	# # this dfionary collect the column strucure of all the used TABLE_NAMES present in the VGP program
+	# table_names_col_df = {
 	# 					'id_col' : {Parameter_table_names : 'PA_Id', VGP_Data_table_names : 'ID', VGP_Value_Double_table_names : 'D_Id', VGP_Value_Int_table_names : 'D_Id', VGP_Value_FunctionD_table_names : 'D_Id', Curve_table_names : None},
 	# 					'sect_perc_col' : {Parameter_table_names : None, VGP_Data_table_names : None, VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None , VGP_Value_FunctionD_table_names : 'D_Parameter', Curve_table_names : None},
 	# 					'val_col' : {Parameter_table_names : 'PA_Value', VGP_Data_table_names : None, VGP_Value_Double_table_names : 'D_Value', VGP_Value_Int_table_names : 'D_Value', VGP_Value_FunctionD_table_names : 'D_Value', Curve_table_names : None},
@@ -374,7 +374,7 @@ class VgpProgram(object):
 	# 					'curve_type_col' : {Parameter_table_names : None, VGP_Data_table_names : None, VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None, VGP_Value_FunctionD_table_names : None, Curve_table_names  : 'CU_Type'},
 	# 				 }
 
-	# table_names_col = pd.DataFrame(table_names_col_vgp_dict)
+	# table_names_col = pd.DataFrame(table_names_col_df)
 
 	# # Get the Parameter id from the parameter name (and curve type, because more parameters have the same name, but only one parameter per curve type)
 	# def get_param_id_from_addr(self, addr): # (self, row.addr)
