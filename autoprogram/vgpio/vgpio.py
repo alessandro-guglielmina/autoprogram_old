@@ -1,6 +1,7 @@
 import sqlite3 as sql
 import numpy as np
 import pandas as pd
+import math
 from pathlib import Path
 import copy
 
@@ -9,6 +10,7 @@ VGPIO_PACKAGE_PATH = VGPIO_MODULE_PATH.parent # directory containing vgpio.py
 NAMES_MAP_FILENAME = "names mapper.xlsx"
 NAMES_MAP_PATH = VGPIO_PACKAGE_PATH.joinpath(NAMES_MAP_FILENAME) # the file "address mapper.xlsx" is always read from the same directory of the vgpio.py module (this module)
 NAMES_MAP_SHEET_NAME = "names mapper"
+WHEEL_CURVE_NAME = "Rollomatic.LibCurve.Data.Curves.WheelProfileCurve"
 
 try:
 	NAMES_MAP_DF = pd.read_excel(NAMES_MAP_PATH, sheet_name = NAMES_MAP_SHEET_NAME, dtype=str)
@@ -39,29 +41,31 @@ class VgpData(pd.DataFrame):
 	"""
 	Description
 	"""
-	def __init__(self, val, sect_perc=None, index=None):
-		if isinstance(sect_perc, pd.DataFrame) and isinstance(val, pd.DataFrame) and index is None:
+	def __init__(self, name, val, sect_perc=None):
+		if isinstance(sect_perc, pd.DataFrame) and isinstance(val, pd.DataFrame):
 			val_ser = val.iloc[:, 0]
 			sect_perc_ser = sect_perc.iloc[:, 0]
-			index = val.index
-		elif val is not None and sect_perc is not None and index is None:
+		elif val is not None and sect_perc is not None:
 			val_ser = pd.Series(val)
 			sect_perc_ser = pd.Series(sect_perc)
-		elif val is not None and sect_perc is None and index is None:
+		elif val is not None and sect_perc is None:
 			val_ser = pd.Series(val)
 			sect_perc_ser = pd.Series(np.nan)
 		else:
 			raise ValueError("Wrong VgpData arguments")
-		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser}, columns = ["val", "sect_perc"], index=index)
+		idx = pd.Index([name]).repeat(val_ser.size)
+		val_ser.index = idx
+		sect_perc_ser.index = idx
+		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser})
 
 class VgpProgram(object):
 	"""
 	This class is an I/O interface to the VGPro program (version 1.29)
 	"""
-	def __init__(self, path, diam_id):
+	def __init__(self, path, diam_name):
 		# path: .vgp file path
 		self.path = path
-		self.diam_id = diam_id
+		self.diam_name = diam_name
 
 	def __enter__(self):
 		# read DataFrame values from the .vgp file
@@ -125,34 +129,6 @@ class VgpProgram(object):
 			else:
 				self.set_Value_idxs(df_arg)
 
-	# def df_unstack(self, df_arg):
-	# 	"""
-	# 	The values in the val_col columns of each DataFRame are set to be arrays in order to deal with consistent data formats;
-	# 	in the VGP_Value_FunctionD DataFrame all the columns but the id_col are set to be arrays, as not only the val_col is meant to represent arrays;
-	# 	the id_col is left as scalr since it's an argument for queries dealing with scalar values
-	# 	"""
-	# 	if df_arg.name in RW_TABLES.index:
-	# 		df_temp = df_arg
-	# 		if df_temp.name == VGP_VALUE_FUNCTIOND.name:
-	# 			# All the columns in VGP_Value_FunctionD table are grouped by the D_Id column and values in other columns collected in pd.array objects
-	# 			df_gr_by_temp = df_temp.groupby(df_temp.id_col)
-	# 			df_temp = df_gr_by_temp.agg(pd.array)
-	# 			# Reset DataFrame additional attributes, because they have been deleted by the previous assignment
-	# 			df_temp.name = df_arg.name
-	# 			df_temp.id_col = df_arg.id_col
-	# 			df_temp.sect_perc_col = df_arg.sect_perc_col
-	# 			df_temp.val_col = df_arg.val_col
-	# 			df_temp.reset_index(inplace=True)
-	# 			del df_gr_by_temp
-	# 		else:
-	# 			# For the other tables, only the val_col is set to be as np.array type (for value data types consistency), other columns are not changed, since they can be arguments for queries
-	# 			if df_temp.name == PARAMETER.name: # for Parameter table, val_col must be cast to float
-	# 				df_temp[df_temp.val_col] = df_temp[df_temp.val_col].str.rstrip(" °mm").astype("float64")
-	# 			df_temp.loc[:, df_temp.val_col] = df_temp[df_temp.val_col].apply(lambda x: pd.array([x])) # change df_arg by reference
-	# 		return df_temp
-	# 	else:
-	# 		return df_arg # if the table is not of the read/write type, the df is returned as it is
-
 	def df_setup(self):
 		"""
 		This method read the specified database tables and write them into corresponding pd.DataFrame object,
@@ -161,32 +137,15 @@ class VgpProgram(object):
 		self.df = {}
 		for table_name, table in ALL_TABLES.iterrows():
 			df_temp = pd.read_sql(f"SELECT * FROM {table_name}", self.con)
+			if table_name == PARAMETER.name: # for Parameter table, val_col must be cast to float
+				df_temp[table.val_col] = df_temp[table.val_col].str.rstrip(" °mm").astype("float64")
 			df_temp.name = table_name
 			df_temp.id_col = table.id_col
 			df_temp.sect_perc_col = table.sect_perc_col
 			df_temp.val_col = table.val_col
-			#df_temp = self.df_unstack(df_temp)
 			self.df_set_idxs(df_temp) # addresses are set to be indexes by this inplace method
 			self.df[table_name] = df_temp
 		del df_temp
-
-	# def df_stack(self, df_arg):
-	# 	"""
-	# 	This method reset the original DataFrame formats in order to be written in the .vgp file
-	# 	"""
-	# 	if df_arg.name in RW_TABLES.index:
-	# 		df_temp = df_arg
-	# 		if df_temp.name == VGP_VALUE_FUNCTIOND.name:
-	# 			df_temp.set_index([df_temp.index, df_temp.id_col], inplace=True) # set current index and D_Id column as index, so they are duplicated while stacking
-	# 			df_temp = df_temp.apply(lambda x: x.apply(pd.Series).stack()) # x is a DataFrame corresponding to a df_temp column, x.apply(pd.Series) is a column DataFrame whose each element (np.array) has been transformed into a pd.Series
-	# 			df_temp.reset_index(level=df_arg.id_col, inplace=True) # move the id_col from index to actual DataFrame column
-	# 			df_temp = df_temp.droplevel(-1) # drop the index level coming from index duplication (populated by 0, 1, ...)
-	# 		else:
-	# 			# For other tables, the arrays in the val_col are reset to be scalar values, other columns are not changed
-	# 			df_temp[df_temp.val_col] = df_temp[df_temp.val_col].apply(lambda x: x[0])
-	# 			if df_temp.name == PARAMETER.name:
-	# 				df_temp[df_temp.val_col] = df_temp[df_temp.val_col].astype("str") # Parameter values are reset to string type
-	# 		return df_temp
 				
 	def df_commit(self):
 		"""
@@ -195,630 +154,132 @@ class VgpProgram(object):
 		for table_name, table in RW_TABLES.iterrows():
 			# Reset Parameter values to be string in order to not alter the original .vgp file data types
 			df_temp = self.df[table_name]
-			# df_temp = self.df_stack(df_temp)
-			# df_temp.to_sql(table.name, self.con, if_exists='replace', index=False)
+			if table_name == PARAMETER.name:
+					df_temp[table.val_col] = df_temp[table.val_col].astype("str") # Parameter values are reset to string type
+			df_temp.to_sql(table.name, self.con, if_exists='replace', index=False)
 		del df_temp, self.df
 
-	def get_addrs(self, names: pd.Series):
+	def get_addr(self, name):
 		"""
 		Description
 		"""
-		get_addr = lambda name: self.elem_wise_query(NAMES_MAP_DF, "val_name", name, "val_addr")
-		return names.apply(get_addr)
+		return self.elem_wise_query(NAMES_MAP_DF, "val_name", name, "val_addr")
 
-	def get_tables(self, addrs: pd.Series):
+	def get_table(self, addr):
 		"""
 		Description
 		"""
-		def get_table(addr):
-			try:
-				return self.elem_wise_query(self.df[VGP_DATA.name], VGP_DATA.val_col, addr, "VGP_Value_Type")
-			except ValueError:
-				return PARAMETER.name
+		try:
+			return self.elem_wise_query(self.df[VGP_DATA.name], VGP_DATA.val_col, addr, "VGP_Value_Type")
+		except ValueError:
+			return PARAMETER.name
 
-		return addrs.apply(get_table)
-
-	def get_arguments_df(self, names):
+	def get_arguments_ser(self, name):
 		"""
 		Description
 		"""
-		names = pd.Series(names)
-		addrs = self.get_addrs(names)
-		tables = self.get_tables(addrs)
-		res = pd.DataFrame({"name": names, "table": tables, "addr": addrs})
-		res.set_index(["name"], inplace=True)
-		return res
+		addr = self.get_addr(name)
+		table = self.get_table(addr)
+		return pd.Series([table, addr], index=["table", "addr"])
 
 	def __getitem__(self, names):
 		"""
 		Description
 		"""
-		def get_data(args_row):
-			df_temp = self.df[args_row.table]
-			val = df_temp.loc[[args_row.addr], [df_temp.val_col]]
-			sect_perc = df_temp.loc[[args_row.addr], [df_temp.sect_perc_col]]\
-						if (df_temp.sect_perc_col in df_temp.columns)\
-						else\
-						pd.DataFrame([np.nan], index=[args_row.addr])
-			return VgpData(val, sect_perc)
+		def get_data(name):
+			args_ser = self.get_arguments_ser(name)
+			table = args_ser["table"]
+			addr = args_ser["addr"]
+			df_temp = self.df[table]
+			val = df_temp.loc[[addr], [df_temp.val_col]]
+			if (df_temp.sect_perc_col in df_temp.columns):
+				sect_perc = df_temp.loc[[addr], [df_temp.sect_perc_col]]
+			else:
+				# Build a sect_perc DataFrame for those datatypes not having a sect_perc column
+				# Parameter return duplicate values for a single index, thus np.nan must be uplicate
+				sect_perc_list = [np.nan for i in val.iterrows()]
+				addr_list = [addr for i in val.iterrows()]
+				sect_perc = pd.DataFrame(sect_perc_list, index=addr_list)
 
-		args_df = self.get_arguments_df(names)
+			return VgpData(name, val, sect_perc)
+
+		names = pd.Series(names)
 		vgp_data_list = []
-		for idx, args_df_row in args_df.iterrows():
-			vgp_data_list.append(get_data(args_df_row))
+		for name in names:
+			vgp_data_list.append(get_data(name))
 		return pd.concat(vgp_data_list)
 
-	def __setitem__(self, name, vgp_data: VgpData):
+	def __setitem__(self, names, raw_data):
 		"""
 		Description
 		"""
-		# def set_data(args_data_row):
-		# 	df_temp = self.df[args_data_row.table]
-		# 	df_temp.loc[[args_data_row.addr], [df_temp.val_col]] = args_data_row.iloc[2] # val
-		# 	if (df_temp.sect_perc_col in df_temp.columns):
-		# 		df_temp.loc[[args_data_row.addr], [df_temp.sect_perc_col]] = args_data_row.iloc[3] # sect_perc
-
-		vgp_data_index = pd.Index([name for row in vgp_data.iterrows()])
-		vgp_data.set_index(vgp_data_index, inplace=True)
-		args_df = self.get_arguments_df(name)
-		table = args_df.loc[name, "table"]
-		addr = args_df.loc[name, "addr"]
-		df_temp = self.df[table]
-		df_temp.loc[[addr], [df_temp.val_col]] = vgp_data.loc[name, "val"].values # val
-		if (df_temp.sect_perc_col in df_temp.columns):
-			df_temp.loc[[addr], [df_temp.sect_perc_col]] = vgp_data.loc[name, "sect_perc"].values # sect_perc
-		
-		# print(args_data_ser)
-		# input()
-		# df_temp = self.df[args_data_row.table]
-		# print()
-		# iter_names = args_data_df.drop_duplicates(keep='first', inplace=True)
-		# for iter_name in iter_names:
-		# 	set_data(args_data_df[iter_names])
-
-	# def val_names_to_addr(self, val_names):
-	# 	"""
-	# 	This method convert the value names contained in the val_names Series into their correspondent address by means of the ADDR_MAP_DF,
-	# 	the DataFrame corresponding to the address mapper workbook
-	# 	"""
-	# 	val_addr_qry = lambda val_name: self.elem_wise_query(ADDR_MAP_DF, "val_name", val_name, "val_addr")
-	# 	val_addr = val_names.apply(val_addr_qry)
-	# 	mapped_val_names_filt = val_addr.notna()
-	# 	if mapped_val_names_filt.all():
-	# 		return val_addr
-	# 	else:
-	# 		not_mapped_val_names = val_names[~mapped_val_names_filt]
-	# 		raise ValueError(f"Not mapped value names: {not_mapped_val_names.to_list()}")
-
-	# def elem_wise_param_addr_build(self, param_name):
-	# 	"""
-	# 	This method builds the parameter address (custom string collecting the curve type and the parameter name, acting as unique identifier)
-	# 	from the parameter name (RConnect id, i.e. a string value); it has to be used with the pd.apply() method in order to convert eah name
-	# 	in the Series into its correspondent address
-	# 	"""
-	# 	split_param_name = param_name.split(SEPARATOR)
-	# 	if split_param_name[0] == "Tool":
-	# 		param_addr = "Rollomatic.LibCurve.Data.Curves.ToolProfileCurve" + SEPARATOR + split_param_name[-1]
-	# 		return param_addr
-	# 	elif split_param_name[0] == "Blank":
-	# 		param_addr = "Rollomatic.LibCurve.Data.Curves.BlankProfileCurve" + SEPARATOR + split_param_name[-1]
-	# 		return param_addr
-	# 	else:
-	# 		raise ValueError(f"No such a parameter name: {param_name}")
-
-	# def param_names_to_addr(self, param_names):
-	# 	"""
-	# 	This method takes a pd.Series as argument with the selected parameter names and returns a pd.Series of the same length with the
-	# 	correspondent parameter addresses (unique identifiers)
-	# 	"""
-	# 	param_addr = param_names.apply(self.elem_wise_param_addr_build)
-	# 	return param_addr
-
-	# def names_to_addr(self, names, is_param_filt, is_val_filt):
-	# 	"""
-	# 	Pipeline 1st method: it takes a pd.Series of names, parameter and value boolean filters as arguments
-	# 	and returns a pd.Series of corresponding addresses
-	# 	"""
-	# 	param_names = names[is_param_filt] # applying a pd.Series boolean filter to a pd.Series returns a pd.Series as well with only those elements corresponding to True values
-	# 	val_names = names[is_val_filt]
-	# 	addr = pd.Series([np.nan for i in range(names.size)], dtype=object)
-	# 	addr[is_param_filt] = self.param_names_to_addr(param_names)
-	# 	addr[is_val_filt] = self.val_names_to_addr(val_names)
-	# 	return addr
-
-	# def addr_to_tables(self, addr, is_param_filt, is_val_filt):
-	# 	"""
-	# 	Pipeline 2nd method: it takes a pd.Series of addresses, a pd.Series of names parameter and value boolean filters
-	# 	as arguments and returns a pd.Series of corresponding table names
-	# 	"""
-	# 	tables = pd.Series([np.nan for i in range(addr.size)], dtype=object)
-	# 	tables[is_param_filt] = addr[is_param_filt].apply(lambda x: PARAMETER.name)
-	# 	table_from_val_addr_qry = lambda val_addr: self.elem_wise_query(self.df[VGP_DATA.name], VGP_DATA.val_col, val_addr, "VGP_Value_Type")
-	# 	tables[is_val_filt] = addr[is_val_filt].apply(table_from_val_addr_qry)
-	# 	not_in_prog_addr_filt = tables.isna()
-	# 	if not_in_prog_addr_filt.any():
-	# 		not_in_prog_addr = addr[not_in_prog_addr_filt]
-	# 		raise ValueError(f"Value addresses not in the program: {not_in_prog_addr.to_list()}")
-	# 	else:
-	# 		return tables
-
-	# def names_to_query_args_df(self, names, is_param_filt, is_val_filt):
-	# 	"""
-	# 	This method takes a pd.Series of names and value boolean filters as arguments and returns a pd.DataFrame of
-	# 	corresponding query arguments (tables and addresses)
-	# 	"""
-	# 	addr = self.names_to_addr(names, is_param_filt, is_val_filt)
-	# 	tables = self.addr_to_tables(addr, is_param_filt, is_val_filt)
-	# 	qry_args_df = pd.DataFrame({"table": tables, "addr": addr})
-	# 	return qry_args_df
-
-	# def is_param(self, names):
-	# 	"""
-	# 	This method takes a Series of names as argument and returns a boolean filter (pd.Series) that is True for those values being parameters
-	# 	(not in the address mapper workbook)
-	# 	"""
-	# 	is_param_filt = ~names.isin(ADDR_MAP_DF.val_name)
-	# 	return is_param_filt
-
-	# def is_val(self, names):
-	# 	"""
-	# 	This method takes a Series of names as argument and returns a boolean filter (pd.Series) that is True for those values being values
-	# 	(in the address mapper workbook)
-	# 	"""
-	# 	is_val_filt = names.isin(ADDR_MAP_DF.val_name)
-	# 	return is_val_filt
-
-	# def get_vals_qry(self, qry_args):
-	# 	"""
-	# 	Return Value type values
-	# 	"""
-	# 	if qry_args.table != PARAMETER.name:
-	# 		val = self.df[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
-	# 	# For Parameter values duplicates must be dropped in order to return a single value per label
-	# 	else:
-	# 		no_dupl_param_df = self.df[qry_args.table][~self.df[qry_args.table].index.duplicated(keep='first')]
-	# 		val = no_dupl_param_df.loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "val_col"]]
-	# 	return val
-
-	# def get_sect_percs_qry(self, qry_args):
-	# 	"""
-	# 	Return Parameter type values
-	# 	"""
-	# 	try:
-	# 		sect_perc = self.df[qry_args.table].loc[qry_args.addr, RW_TABLES.loc[qry_args.table, "sect_perc_col"]]
-	# 	except KeyError:
-	# 		sect_perc = np.nan
-	# 	return sect_perc
-
-	# def __getitem__(self, names):
-	# 	"""
-	# 	This method allows to get elements by indexing, it can take strings and array-like of strings as arguments
-	# 	"""
-	# 	names = pd.Series(names)
-	# 	names_len = names.size
-	# 	# Get the boolean filters relative to those names being Parameter type and those being Value type
-	# 	# (constant through the whole __getitem__ method)
-	# 	is_param_filt = self.is_param(names)
-	# 	is_val_filt = self.is_val(names)
-	# 	# Get a DataFrame with two columns, one is for tables ("table" column) and one for addresses ("addr" column)
-	# 	qry_args_df = self.names_to_query_args_df(names, is_param_filt, is_val_filt)
-	# 	qry_args_df = qry_args_df[~qry_args_df.index.duplicated(keep='first')] # delete duplicates due to Parameter values
-	# 	# Iterate over the two columns: each qry_args_df row is passed as argument to the function inside .apply() (self.get_vals_qry and self.get_sect_percs_qry,
-	# 	# each taking the arguments qry_args.addr and qry_args.table)
-	# 	vals = qry_args_df.apply(self.get_vals_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
-	# 	sect_percs = qry_args_df.apply(self.get_sect_percs_qry, axis=1) # .apply() method applied to a DataFrame with axis=1 iterates over each row (pd.Series)
-	# 	del is_param_filt, is_val_filt
-	# 	data = pd.DataFrame({"sect_perc": sect_percs, "val": vals}).set_index(names)
-	# 	return data
-
-	# def set_vals_qry(self, qry_args_value):
-	# 	"""
-	# 	EXCEPTIONS TO BE ADDED!!!
-	# 	"""
-	# 	# print(self.df[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]])
-	# 	# print(qry_args_value.val)
-	# 	# input("pause")
-	# 	self.df[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "val_col"]] = [qry_args_value.val]
-	# 	self.df[qry_args_value.table].loc[qry_args_value.addr, RW_TABLES.loc[qry_args_value.table, "sect_perc_col"]] = [qry_args_value.sect_perc]
-
-	# def __setitem__(self, names, values):
-	# 	"""
-	# 	EXCEPTIONS TO BE ADDED!!!
-	# 	"""
-	# 	names = pd.Series(names)
-	# 	names_len = names.size
-	# 	is_param_filt = self.is_param(names)
-	# 	is_val_filt = self.is_val(names)
-	# 	qry_args_df = self.names_to_query_args_df(names, is_param_filt, is_val_filt)
-	# 	qry_args_df = qry_args_df[~qry_args_df.index.duplicated(keep='first')]
-	# 	qry_args_values_df = pd.concat([qry_args_df, values], axis=1)
-	# 	qry_args_values_df.apply(self.set_vals_qry, axis=1)
-
-	# Parameter_table_names = 'Parameter'
-
-	# VGP_Data_table_names = 'VGP_Data'
-
-	# VGP_Value_Double_table_names = 'VGP_Value_Double'
-
-	# VGP_Value_Int_table_names = 'VGP_Value_Int'
-
-	# VGP_Value_FunctionD_table_names = 'VGP_Value_FunctionD'
-
-	# # this dfionary collect the column strucure of all the used TABLE_NAMES present in the VGP program
-	# table_names_col_df = {
-	# 					'id_col' : {Parameter_table_names : 'PA_Id', VGP_Data_table_names : 'ID', VGP_Value_Double_table_names : 'D_Id', VGP_Value_Int_table_names : 'D_Id', VGP_Value_FunctionD_table_names : 'D_Id', Curve_table_names : None},
-	# 					'sect_perc_col' : {Parameter_table_names : None, VGP_Data_table_names : None, VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None , VGP_Value_FunctionD_table_names : 'D_Parameter', Curve_table_names : None},
-	# 					'val_col' : {Parameter_table_names : 'PA_Value', VGP_Data_table_names : None, VGP_Value_Double_table_names : 'D_Value', VGP_Value_Int_table_names : 'D_Value', VGP_Value_FunctionD_table_names : 'D_Value', Curve_table_names : None},
-	# 					'val_addr_col' : {Parameter_table_names : None, VGP_Data_table_names : 'PartialFullname', VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None, VGP_Value_FunctionD_table_names : None, Curve_table_names : None},
-	# 					'name_col' : {Parameter_table_names : 'PA_Name', VGP_Data_table_names : None, VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None, VGP_Value_FunctionD_table_names : None, Curve_table_names : None},
-	# 					'datatype_col' : {Parameter_table_names : None, VGP_Data_table_names : 'VGP_Value_Type', VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None, VGP_Value_FunctionD_table_names : None, Curve_table_names : None},
-	# 					'curve_id_col' : {Parameter_table_names : 'PA_CurveId', VGP_Data_table_names : None, VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None, VGP_Value_FunctionD_table_names : None, Curve_table_names  : 'CU_Id'},
-	# 					'curve_type_col' : {Parameter_table_names : None, VGP_Data_table_names : None, VGP_Value_Double_table_names : None, VGP_Value_Int_table_names : None, VGP_Value_FunctionD_table_names : None, Curve_table_names  : 'CU_Type'},
-	# 				 }
-
-	# table_names_col = pd.DataFrame(table_names_col_df)
-
-	# # Get the Parameter id from the parameter name (and curve type, because more parameters have the same name, but only one parameter per curve type)
-	# def get_param_id_from_addr(self, addr): # (self, row.addr)
-
-	# 	try:
-
-	# 		addr = addr.split(common.Variables.separator) # split the address in parameter type and parameter name
-
-	# 		curve_type = addr[0]
-
-	# 		param_name = addr[1]
-
-	# 	except IndexError:
-
-	# 		raise ValueError(f'Wrong Parameter address or value name not present in the program: {addr}.')
-
-	# 	# Get the possible curve ids from Curve table_names
-	# 	poss_curve_ids = self.get_values_single_id(self.Curve_table_names, self.table_names_col.loc[self.Curve_table_names, 'curve_type_col'],\
-
-	# 					 self.table_names_col.loc[self.Curve_table_names, 'curve_id_col'], curve_type) # [poss_cu_id1, poss_cu_id2, ...]
-
-	# 	# Get all the curve ids corresponding to the parameter name
-	# 	same_name_curve_ids = self.get_values_single_id(self.Parameter_table_names, self.table_names_col.loc[self.Parameter_table_names, 'name_col'],\
-
-	# 						  self.table_names_col.loc[self.Parameter_table_names, 'curve_id_col'], param_name)
-
-	# 	# Get all the parameter ids corresponding to the parameter name
-	# 	same_name_param_ids = self.get_values_single_id(self.Parameter_table_names, self.table_names_col.loc[self.Parameter_table_names, 'name_col'],\
-
-	# 						   self.table_names_col.loc[self.Parameter_table_names, 'id_col'], param_name)
-
-	# 	# Collect curve ids and parameter ids in a DataFrame
-	# 	param_data = pd.DataFrame({'curve_id': pd.Series(same_name_curve_ids, dtype = 'str'),
-
-	# 							   'param_id': pd.Series(same_name_param_ids, dtype = 'str'),})
-
-	# 	res = param_data.loc[param_data.curve_id.isin(poss_curve_ids), 'param_id'].values[0] # the query could returns 2 values, but changing one, vgp automatically update the other one
-	# 																						 # otherwise we should treat it as a function value																				
-	# 	return res # param_id
-
-	
-	# # vgp_get_dtype_n_id() auxiliary function
-	# def get_dtype_n_id_from_single_addr(self, addr): #(self, 'val_address')
-
-	# 	try:
-
-	# 		dtype = self.get_values_single_id(self.VGP_Data_table_names, self.table_names_col.loc[self.VGP_Data_table_names, 'val_addr_col'], self.table_names_col.loc[self.VGP_Data_table_names, 'datatype_col'], addr)[0]
-
-	# 		id_ = self.get_values_single_id(self.VGP_Data_table_names, self.table_names_col.loc[self.VGP_Data_table_names, 'val_addr_col'], self.table_names_col.loc[self.VGP_Data_table_names,'id_col'], addr)[0]
-
-	# 		res = np.asarray([[dtype, id_]])
-
-	# 	# If get_values() returns a Parameter
-	# 	except:
-
-	# 		id_ = self.get_param_id_from_addr(addr)
-
-	# 		res = np.asarray([[self.Parameter_table_names, id_]]) # strings
-
-	# 	return res #array([['table_names', 'id']])
-
-
-	# # Returm the data type and the id corresponding to a certain address array for data types VGP_Value_Double, VGP_Value_Int, VGP_Value_String, ... (not Parameter)
-	# def get_dtypes_n_ids(self, addr): #(self, array(['val_addr1', 'val_addr2', ...]))
-
-	# 	res = np.empty((0,2))
-
-	# 	for i in addr:
-
-	# 		dtype_n_id_i = self.get_dtype_n_id_from_single_addr(i)
-
-	# 		res = np.append(res, dtype_n_id_i, axis = 0)
-
-	# 	return res # array([['table_names1', 'id1'], ['table_names2', 'id2'], ...])
-
-
-	# # Get id_col and val_col alongside table_names and id, obtained with the previous function (values that must not be averaged are skipped because of the previous function)
-	# def get_qry_data_from_addr(self, addresses): #(self, ['val_addr1', 'val_addr2', ...])) T.B.N. addresses not belonging to TABLE_NAMES 'Parameter', 'VGP_Value_Double' or 'VGP_Value_FunctionD' are automatically deleted
-
-	# 	dtypes_n_ids = self.get_dtypes_n_ids(addresses)
-
-	# 	columns = ['val_addr', 'table_names', 'id_col', 'sect_perc_col', 'val_col', 'id']
-
-	# 	res = pd.DataFrame(columns = columns, dtype = str)
-
-	# 	for dts_n_ids, addr in zip(dtypes_n_ids, addresses):
-
-	# 		dtype = dts_n_ids[0]
-
-	# 		id_ = dts_n_ids[1]
-
-	# 		if dtype in [self.Parameter_table_names, self.VGP_Value_Double_table_names, self.VGP_Value_Int_table_names]:
-
-	# 			res = res.append({'val_addr' : addr, 'table_names' : dtype, 'id_col' : self.table_names_col.loc[dtype, 'id_col'], 'sect_perc_col' : None, 'val_col' : self.table_names_col.loc[dtype, 'val_col'],\
-
-	# 				  'id' : id_}, ignore_index = True)
-
-	# 		elif dtype == self.VGP_Value_FunctionD_table_names:
-
-	# 			res = res.append({'val_addr' : addr, 'table_names' : dtype, 'id_col' : self.table_names_col.loc[dtype, 'id_col'], 'sect_perc_col' : self.table_names_col.loc[dtype, 'sect_perc_col'],\
-
-	# 				  'val_col' : self.table_names_col.loc[dtype, 'val_col'],'id' : id_}, ignore_index = True)
-
-	# 		else:
-
-	# 			raise ValueError(f'Data in {dtype} must not be processed.')
-
-	# 	return res # DataFrame(['val_addr', 'table_names', 'id_col', 'sect_perc_col', 'val_col', 'id'])
-	# 	# T.B.N. addresses not belonging to TABLE_NAMES 'Parameter', 'VGP_Value_Double' or 'VGP_Value_FunctionD' are automatically deleted
-
-
-	# # Return a list containng both scalar values and function values in string format (to obtain float values the output must be cast!!!)
-	# def get_values_from_qry_data(self, qry_data): #(self, DataFrame(['val_addr', 'table_names', 'id_col', 'sect_perc_col', 'val_col', 'id'])) T.B.N. addresses not belonging to TABLE_NAMES 'Parameter', 'VGP_Value_Double' or 'VGP_Value_FunctionD' are automatically deleted
-
-	# 	columns = ['sect_perc', 'val']
-
-	# 	res = pd.DataFrame(columns = columns, dtype = float)
-
-	# 	for i, row in qry_data.iterrows(): # row is the pd.Series corresponding to a specific row
-
-	# 		# If the value is a scalar integer
-	# 		if row.table_names == self.VGP_Value_Int_table_names:
-
-	# 			val = self.get_values_single_id(row.table_names, row.id_col, row.val_col, row.id) # value can be either an array of string or None values
-
-
-	# 			if val:
-
-	# 				val = val.astype(int)
-
-	# 			else:
-
-	# 				val = np.array([np.nan])
-
-	# 			res = res.append({'sect_perc' : None, 'val' : val}, ignore_index = True)
-
-	# 		# If the value is a scalar float
-	# 		if row.table_names in [self.Parameter_table_names, self.VGP_Value_Double_table_names]:
-
-	# 			val = self.get_values_single_id(row.table_names, row.id_col, row.val_col, row.id) # value can be either an array of string or None values
-
-	# 			if val:
-
-	# 				val = np.char.rstrip(val, ' mm°')
-
-	# 				val = val.astype(float)
-
-	# 			else:
-
-	# 				val = np.array([np.nan])
-
-	# 			res = res.append({'sect_perc' : None, 'val' : val}, ignore_index = True)
-
-	# 		# If the value is a function value:
-	# 		elif row.table_names == self.VGP_Value_FunctionD_table_names:
-
-	# 			sect_perc = self.get_values_single_id(row.table_names, row.id_col, row.sect_perc_col, row.id) # value can be either array of strings or None values
-
-	# 			val = self.get_values_single_id(row.table_names, row.id_col, row.val_col, row.id)
-
-	# 			np.char.rstrip(sect_perc, ' mm°')
-
-	# 			np.char.rstrip(val, ' mm°')
-
-	# 			sect_perc = sect_perc.astype(float)
-
-	# 			val = val.astype(float)
-
-	# 			res = res.append({'sect_perc' : sect_perc, 'val' : val}, ignore_index = True)
-
-	# 	return res  # DataFrame(['sect_perc', 'val'])
-
-
-	# def get_values_from_addr(self, param_addr): # (self, list(['par_addr1', 'par_addr2', ...]))
-
-	# 	# Get query data from addresses
-	# 	qry_data = self.get_qry_data_from_addr(param_addr)
-
-	# 	return self.get_values_from_qry_data(qry_data) # DataFrame(['sect_perc', 'val'])
-
-
-	# def get_addr_from_names(self, param_names):
-
-	# 	param_addr = []
-
-	# 	for param_name in param_names:
-
-	# 		# return a 1-sized pd.Series object with the address corresponding to the name (if the name and address have been recorded)
-	# 		param_addr_i = common.Variables.values_database_sh.val_addr[common.Variables.values_database_sh.val_name == param_name]
-
-	# 		try:
-
-	# 			param_addr_i = param_addr_i.iloc[0] # returns the string value of the address
-
-	# 		except IndexError:
-
-	# 			raise ValueError(f'No such a name in the values database: {param_name}.') # if the name and address have not been recorded yet, raises a ValueError
-
-	# 		param_addr.append(param_addr_i)
-
-	# 	return param_addr
-
-
-	# def get_values_from_names(self, param_names): # (self, list(['par_name1', 'par_name2', ...]))
-
-	# 	param_addr = self.get_addr_from_names(param_names)
-
-	# 	qry_data = self.get_qry_data_from_addr(param_addr)
-
-	# 	return self.get_values_from_qry_data(qry_data) # DataFrame(['sect_perc', 'val'])
-
-
-	# # Return a list containng both scalar values and function values in string format (to obtain float values the output must be cast!!!)
-	# def update_values_from_qry_data(self, qry_data, vals): #(self, DataFrame(['val_addr', 'table_names', 'id_col', 'sect_perc_col', 'val_col', 'id'])), DataFrame(['sect_perc', 'val'])
-
-	# 	for qry_data_iterrows, vals_iterrows in zip(qry_data.iterrows(), vals.iterrows()):
-
-	# 		qry_i, qry_row = qry_data_iterrows
-
-	# 		val_i, val_row = vals_iterrows
-
-	# 		# If the value is a float scalar:
-	# 		if qry_row.table_names in [self.Parameter_table_names, self.VGP_Value_Double_table_names]:
-
-	# 			#print(qry_row.table_names, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
-
-	# 			self.update_values_single_id(qry_row.table_names, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val) # no need to cast, as all the values are float already
-
-	# 		# If the value is an integer scalar:
-	# 		elif qry_row.table_names == self.VGP_Value_Int_table_names:
-
-	# 			self.update_values_single_id(qry_row.table_names, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val) # value must be cast,from float to integer
-
-	# 		# If the value is a function:
-	# 		elif qry_row.table_names == self.VGP_Value_FunctionD_table_names:
-
-	# 			# If a function value has a single input
-	# 			val_len = len(val_row.val)
-
-	# 			# if not hasattr(val_row.val, "__len__") and val_row.sect_perc == None:
-	# 			if val_len == 1 and val_row.sect_perc is None:
-
-	# 				val_row.val = [val_row.val[0], val_row.val[0]]
-
-	# 				val_row.sect_perc = [0, 1]
-
-	# 			elif val_len > 1 and val_row.sect_perc is None:
-
-	# 				nums = range(val_len)
-
-	# 				den = val_len - 1
-
-	# 				val_row.sect_perc = [num / den for num in nums]
-
-	# 			self.update_values_single_id(qry_row.table_names, qry_row.id_col, qry_row.sect_perc_col, qry_row.id, val_row.sect_perc)
-
-	# 			self.update_values_single_id(qry_row.table_names, qry_row.id_col, qry_row.val_col, qry_row.id, val_row.val)
-
-	# 		else:
-
-	# 			raise ValueError('Wrong datatype provided')
-
-
-	# def update_values_from_addr(self, param_addr, vals): # (self, list(['par_addr1', 'par_addr2', ...]), DataFrame(['sect_perc', 'val']))
-
-	# 	# Get query data from addresses
-	# 	qry_data = self.get_qry_data_from_addr(param_addr)
-
-	# 	return self.update_values_from_qry_data(qry_data, vals)
-
-
-	# def update_values_from_names(self, param_names, vals): # (self, list(['par_name1', 'par_name2', ...]), DataFrame(['sect_perc', 'val']))
-
-	# 	param_addr = self.get_addr_from_names(param_names) # ERROR
-
-	# 	qry_data = self.get_qry_data_from_addr(param_addr)
-
-	# 	return self.update_values_from_qry_data(qry_data, vals)
-
-
-	# # Get all the query data that have to be scaled (without passing through addresses)
-	# def get_to_scale_qry_data(self):
-
-	# 	# Get Parameter addresses, composing parameter name and curve type
-	# 	par_addr_part2 = self.get_whole_column(self.Parameter_table_names, self.table_names_col.loc[self.Parameter_table_names, 'name_col'])
-
-	# 	par_curve_ids = self.get_whole_column(self.Parameter_table_names, self.table_names_col.loc[self.Parameter_table_names, 'curve_id_col'])
-
-	# 	curve_ids = self.get_whole_column(self.Curve_table_names, self.table_names_col.loc[self.Curve_table_names, 'curve_id_col'])
-
-	# 	par_addr_part1 = self.get_values_multi_ids([self.Curve_table_names], [self.table_names_col.loc[self.Curve_table_names, 'curve_id_col']], [self.table_names_col.loc[self.Curve_table_names, 'curve_type_col']], par_curve_ids)
-
-	# 	par_addr = pd.Series(par_addr_part1).str.cat(par_addr_part2, sep = common.Variables.separator).to_list()
-
-	# 	# Get Parameter dtypes and ids
-	# 	par_dtypes = [self.Parameter_table_names for i in par_addr]
-
-	# 	par_ids = self.get_whole_column(self.Parameter_table_names, self.table_names_col.loc[self.Parameter_table_names, 'id_col'])
-
-	# 	# Get VGP_Values addresses, dtypes and ids
-	# 	val_addr = self.get_whole_column(self.VGP_Data_table_names, self.table_names_col.loc[self.VGP_Data_table_names, 'val_addr_col']) # array(['val1', 'val2', ...])
-
-	# 	val_dtypes = self.get_whole_column(self.VGP_Data_table_names, self.table_names_col.loc[self.VGP_Data_table_names, 'datatype_col'])
-
-	# 	val_ids = self.get_whole_column(self.VGP_Data_table_names, self.table_names_col.loc[self.VGP_Data_table_names, 'id_col'])
-
-	# 	# Concatenate lists
-	# 	addresses = par_addr + val_addr
-
-	# 	dtypes = par_dtypes + val_dtypes
-
-	# 	ids = par_ids + val_ids
-
-	# 	# Get id_cols and val_cols, query data are appended only if belong to the dtypes Parameter, VGP_Value_Double or VGP_Value_FunctionD
-	# 	columns = ['val_addr', 'table_names', 'id_col', 'sect_perc_col', 'val_col', 'id']
-
-	# 	res = pd.DataFrame(columns = columns, dtype = str)
-
-	# 	for addr, dtype, id_ in zip(addresses, dtypes, ids):
-
-	# 		# Check if the values belong to one of the three types, if the address is not among the input values and if the value is actually used in the program
-	# 		#T.B.N. not all the addresses in VGP_Data are actually used in the program!!!
-	# 		if dtype in [self.Parameter_table_names, self.VGP_Value_Double_table_names, self.VGP_Value_FunctionD_table_names] and addr not in common.Variables.data['val_addr'].tolist()\
-	# 		and id_ in self.get_whole_column(dtype, self.table_names_col.loc[dtype, 'id_col']): # T.B.N. not all the addresses in VGP_Data table_names are actually used in the program
-
-	# 			res = res.append({'val_addr' : addr, 'table_names' : dtype, 'id_col' : self.table_names_col.loc[dtype, 'id_col'], 'sect_perc_col' : self.table_names_col.loc[dtype, 'sect_perc_col'],\
-	# 				  'val_col' : self.table_names_col.loc[dtype, 'val_col'],'id' : id_}, ignore_index = True)
-
-	# 		else:
-
-	# 			pass
-
-	# 	return res # DataFrame(['val_addr', 'table_names', 'id_col', 'sect_perc_col', 'val_col', 'id'])
-
-
-	# def scale_prog_values(self):
-
-	# 	to_scale_qry_data = self.get_to_scale_qry_data()
-
-	# 	up_prog = VgpProg(common.Variables.up_prog_filename)
-
-	# 	low_prog = VgpProg(common.Variables.low_prog_filename)
-
-	# 	with up_prog, low_prog:
-
-	# 		up_to_scale_vals = up_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
-
-	# 		low_to_scale_vals = low_prog.get_values_from_qry_data(to_scale_qry_data) # DataFrame(['sect_perc', 'val'])
-
-	# 	# Data scaling
-	# 	scaled_vals = up_to_scale_vals*(1 - ((common.Variables.up_diam - common.Variables.diam) / (common.Variables.up_diam - common.Variables.low_diam))) +\
-	# 				  low_to_scale_vals*(1 - ((common.Variables.diam - common.Variables.low_diam) / (common.Variables.up_diam - common.Variables.low_diam)))
-
-	# 	self.update_values_from_qry_data(to_scale_qry_data, scaled_vals)
-
-
-	# def update_input_values(self):
-
-	# 	input_vals_ind = np.logical_and(common.Variables.data.val_addr.notnull(), common.Variables.data.rel.isnull()) # input values that can be directly updated must have an address and no relations
-
-	# 	addr_list = common.Variables.data.val_addr[input_vals_ind].tolist() # address list
-
-	# 	vals = common.Variables.data.loc[input_vals_ind, 'sect_perc':'val'] # sect percs and vals DataFrame
-
-	# 	self.update_values_from_addr(addr_list, vals)
+		def set_data(name):
+			args_ser = self.get_arguments_ser(name) # get a DataFrame contining table and address correspondent to the name
+			table = args_ser["table"]
+			addr = args_ser["addr"]
+			df_temp = self.df[table]
+			df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # val
+			# if (df_temp.sect_perc_col in df_temp.columns):
+			# 	df_temp.loc[[addr], [df_temp.sect_perc_col]] = vgp_data_df.loc[name, "sect_perc"].values # sect_perc
+
+		# Argument homogeneization
+		names = pd.Series(names)
+		data_df = pd.DataFrame.from_records(raw_data)
+		vgp_data_list = []
+		for name, [data_idx, data] in zip(names, data_df.iterrows()):
+			vgp_data = VgpData(name, data.iloc[0], data.iloc[1])
+			vgp_data_list.append(vgp_data)
+		vgp_data_df = pd.concat(vgp_data_list)
+		names.apply(set_data)
+
+	@classmethod
+	def scale_tool(cls, self, diam, low_path, up_path):
+		"""
+		Description
+		"""
+		def scale(diam, low_diam, low_ser, up_diam, up_ser):
+			"""
+			Description
+			"""
+			def round_to_significant_figures(num, sf):
+				"""
+				Description
+				"""
+				try:
+					return round(num, sf - 1 - int(math.floor(math.log10(abs(num)))))
+				except ValueError:
+					return num
+
+			if diam > up_diam or diam < low_diam:
+				raise ValueError("No value scaling is possible with the passed programs")
+			delta_diam = up_diam - low_diam
+			low_delta = diam - low_diam
+			up_delta = up_diam - diam
+			low_coeff = 1 - low_delta / delta_diam
+			up_coeff = 1 - up_delta / delta_diam
+			res = low_ser * low_coeff + up_ser * up_coeff
+			return res.apply(lambda num: round_to_significant_figures(num, 5)) # round values to 5 significant figures
+
+		low_prog = cls(low_path, self.diam_name)
+		up_prog = cls(up_path, self.diam_name)
+		with low_prog, up_prog:
+			low_diam = low_prog[low_prog.diam_name].val.iloc[0]
+			up_diam = up_prog[up_prog.diam_name].val.iloc[0]
+			for table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND): # only these tables are scaled
+				df_temp = self.df[table.name]
+				# Parameter values relative to wheel geometry are not scaled
+				if table.name == PARAMETER.name:
+					curve_df = self.df[CURVE.name]
+					is_wheel_func = lambda PA_CurveId: True\
+									if self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME\
+									else False
+					is_wheel_filt = df_temp.PA_CurveId.apply(is_wheel_func)
+					df_temp.loc[is_wheel_filt, table.val_col] = scale(diam, low_diam,\
+					low_prog.df[table.name].loc[is_wheel_filt, table.val_col], up_diam, up_prog.df[table.name].loc[is_wheel_filt, table.val_col])
+				else:
+					df_temp[table.val_col] = scale(diam, low_diam,\
+					low_prog.df[table.name][table.val_col], up_diam, up_prog.df[table.name][table.val_col])
+				# VGP_Value_FunctionD values are scaled also with respect to the sect_per column
+				if table.name == VGP_VALUE_FUNCTIOND.name:
+					df_temp[table.sect_perc_col] = scale(diam, low_diam,\
+					low_prog.df[table.name][table.sect_perc_col], up_diam, up_prog.df[table.name][table.sect_perc_col])
