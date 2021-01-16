@@ -43,18 +43,16 @@ class VgpData(pd.DataFrame):
 		if isinstance(sect_perc, pd.DataFrame) and isinstance(val, pd.DataFrame) and index is None:
 			val_ser = val.iloc[:, 0]
 			sect_perc_ser = sect_perc.iloc[:, 0]
-			idx = val.index
-		elif val is not None and sect_perc is not None and index is not None:
-			val_list = pd.Series(val).to_list()
-			sect_perc_list = pd.Series(sect_perc).to_list()
-			idx = pd.Index([index])
-		elif val is not None and sect_perc is None and index is not None:
-			val_list = pd.Series(val).to_list()
-			sect_perc_list = pd.Series(np.nan).to_list()
-			idx = pd.Index([index])
+			index = val.index
+		elif val is not None and sect_perc is not None and index is None:
+			val_ser = pd.Series(val)
+			sect_perc_ser = pd.Series(sect_perc)
+		elif val is not None and sect_perc is None and index is None:
+			val_ser = pd.Series(val)
+			sect_perc_ser = pd.Series(np.nan)
 		else:
 			raise ValueError("Wrong VgpData arguments")
-		super().__init__({"sect_perc": sect_perc_list, "val": val_list}, columns = ["sect_perc", "val"], index=idx)
+		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser}, columns = ["val", "sect_perc"], index=index)
 
 class VgpProgram(object):
 	"""
@@ -227,7 +225,9 @@ class VgpProgram(object):
 		names = pd.Series(names)
 		addrs = self.get_addrs(names)
 		tables = self.get_tables(addrs)
-		return pd.DataFrame({"table": tables, "addr": addrs})
+		res = pd.DataFrame({"name": names, "table": tables, "addr": addrs})
+		res.set_index(["name"], inplace=True)
+		return res
 
 	def __getitem__(self, names):
 		"""
@@ -240,7 +240,7 @@ class VgpProgram(object):
 						if (df_temp.sect_perc_col in df_temp.columns)\
 						else\
 						pd.DataFrame([np.nan], index=[args_row.addr])
-			return VgpData(sect_perc, val)
+			return VgpData(val, sect_perc)
 
 		args_df = self.get_arguments_df(names)
 		vgp_data_list = []
@@ -248,40 +248,33 @@ class VgpProgram(object):
 			vgp_data_list.append(get_data(args_df_row))
 		return pd.concat(vgp_data_list)
 
-	def __setitem__(self, name_list: list, data_list: list):
+	def __setitem__(self, name, vgp_data: VgpData):
 		"""
 		Description
 		"""
-		def set_data(args_data_row):
-			df_temp = self.df[args_data_row.table]
-			df_temp.loc[args_data_row.addr, df_temp.val_col] = args_data_row["val"]
-			if (df_temp.sect_perc_col in df_temp.columns):
-				df_temp.loc[[args_row.addr], [df_temp.sect_perc_col]] = args_data_row["sect_perc"]
+		# def set_data(args_data_row):
+		# 	df_temp = self.df[args_data_row.table]
+		# 	df_temp.loc[[args_data_row.addr], [df_temp.val_col]] = args_data_row.iloc[2] # val
+		# 	if (df_temp.sect_perc_col in df_temp.columns):
+		# 		df_temp.loc[[args_data_row.addr], [df_temp.sect_perc_col]] = args_data_row.iloc[3] # sect_perc
 
-		if len(name_list) != len(data_list):
-			raise ValueError("Argument names and data sizes don't match")
-		vgp_data_list = []
-		for name, data in zip(name_list, data_list):
-			try:
-				val = data[0]
-			except KeyError:
-				val = data
-			except TypeError:
-				val = data
-			try:
-				sect_perc = data[1]
-			except KeyError:
-				sect_perc = None
-			except TypeError:
-				sect_perc = None
-			vgp_data_list.append(VgpData(val, sect_perc, name))
-		vgp_data = pd.concat(vgp_data_list)
-		args_df = self.get_arguments_df(name_list)
-		args_data_df =  pd.concat([args_df, vgp_data], axis=1)
-		print(args_data_df)
-		input()
-		for idx, args_data_df_row in args_data_df.iterrows():
-			set_data(args_data_df_row)
+		vgp_data_index = pd.Index([name for row in vgp_data.iterrows()])
+		vgp_data.set_index(vgp_data_index, inplace=True)
+		args_df = self.get_arguments_df(name)
+		table = args_df.loc[name, "table"]
+		addr = args_df.loc[name, "addr"]
+		df_temp = self.df[table]
+		df_temp.loc[[addr], [df_temp.val_col]] = vgp_data.loc[name, "val"].values # val
+		if (df_temp.sect_perc_col in df_temp.columns):
+			df_temp.loc[[addr], [df_temp.sect_perc_col]] = vgp_data.loc[name, "sect_perc"].values # sect_perc
+		
+		# print(args_data_ser)
+		# input()
+		# df_temp = self.df[args_data_row.table]
+		# print()
+		# iter_names = args_data_df.drop_duplicates(keep='first', inplace=True)
+		# for iter_name in iter_names:
+		# 	set_data(args_data_df[iter_names])
 
 	# def val_names_to_addr(self, val_names):
 	# 	"""
