@@ -1,26 +1,27 @@
-from pathlib import Path
-import glob
-import os
-import time
-import sqlite3
-import numpy as np
-import pandas as pd
-import shutil
-from itertools import compress
-import re
-import math
+# from pathlib import Path
+# import glob
+# import os
+# import time
+# import sqlite3
+# import numpy as np
+# import pandas as pd
+# import shutil
+# from itertools import compress
+# import re
+# import math
+import tkinter as tk
 
-from autoprogram import common
-from autoprogram import wbmodule as wbm
-from autoprogram import progmodule as pm
+# from autoprogram import common
+# from autoprogram import wbmodule as wbm
+# from autoprogram import progmodule as pm
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
-# This is the first program step in which the information carrier is initialized with the familiy name (provided by the user)
-class Initialize(object):
-
-	# Get the family names from the family directories inside the master programs directory
+class SelectFamily(object):
+	"""
+	Description
+	"""
 	@staticmethod
 	def get_fam_names():
 

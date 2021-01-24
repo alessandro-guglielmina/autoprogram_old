@@ -37,6 +37,7 @@ for rw_table_series in RW_TABLE_SERIES:
 ALL_TABLES = R_TABLES.append(RW_TABLES) # Vgp_Data table must be read before the other ones
 SEPARATOR = "."
 
+
 class VgpData(pd.DataFrame):
 	"""
 	Description
@@ -57,6 +58,7 @@ class VgpData(pd.DataFrame):
 		val_ser.index = idx
 		sect_perc_ser.index = idx
 		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser})
+
 
 class VgpProgram(object):
 	"""

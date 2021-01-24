@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-from autoprogram import settingsmodule as sm
+from autoprogram import settingsparser as sp
 from autoprogram import wbmodule as wbm
 
 
@@ -27,21 +27,21 @@ vgp_suffix = '.vgp'
 separator = '-'
 
 # settings file name
-settings_filename = sm.settings_filename # settings path with respect to the project root
+settings_filename = sp.settings_filename # settings path with respect to the project root
 
 # work directories section
-work_directories_section = sm.work_directories_section
+work_directories_section = sp.work_directories_section
 
 # master programs directory variable in the .ini file
-master_progs_dir_var = sm.master_progs_dir_var
+master_progs_dir_var = sp.master_progs_dir_var
 
 # result program directory variable in the .ini file
-res_progs_dir_var = sm.res_progs_dir_var
+res_progs_dir_var = sp.res_progs_dir_var
 
 # get the string paths from the settings module
-master_progs_dir_path = sm.master_progs_dir_path
+master_progs_dir_path = sp.master_progs_dir_path
 
-res_progs_dir_path = sm.res_progs_dir_path
+res_progs_dir_path = sp.res_progs_dir_path
 
 # declare master and result programs directories as windows paths
 master_progs_dir = Path(master_progs_dir_path)
