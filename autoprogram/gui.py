@@ -7,28 +7,30 @@ import os
 from pathlib import Path
 
 from autoprogram import common
+from autoprogram import helper as hp
 from autoprogram import settingsparser as sp
 
 
-def try_decorator(confirm_function):
+def try_decorator(next_method):
 	"""
 	This decorator is added to any confirm function, in order to print the error (if any) on the communication label
 	"""
 	def wrapper_function(*args, **kwargs):
 		try:
-			return confirm_function(*args, **kwargs)
-		except Exception as e:
-			args[0].root.comm_label_write(e) # args[0] is self, i.e. the frame object (the page)
+			args[0].root.comm_label_write("")
+			return next_method(*args, **kwargs)
+		except ValueError as ve:
+			args[0].root.comm_label_write(ve) # args[0] is self, i.e. the frame object (the page)
 	return wrapper_function
 
-def reset_comm_label(next_method):
-	"""
-	Description
-	"""
-	def wrapper_function(*args, **kwargs):
-		args[0].root.comm_label.config(text="") # args[0] is self, i.e. the frame object (the page)
-		return next_method(*args, **kwargs)
-	return wrapper_function
+# def reset_comm_label(next_method):
+# 	"""
+# 	Description
+# 	"""
+# 	def wrapper_function(*args, **kwargs):
+# 		args[0].root.comm_label.config(text="") # args[0] is self, i.e. the frame object (the page)
+# 		return next_method(*args, **kwargs)
+# 	return wrapper_function
 
 
 class App(tk.Tk):
@@ -48,7 +50,7 @@ class App(tk.Tk):
 		file_menu.add_command(label="Exit", command=self.quit)
 		# The following widgets get their features from the specific page
 		# create an heading
-		self.mode = None
+		# self.mode = None
 		self.head_label = tk.Label(self, width=70, height=3)
 		self.head_label.grid(row=0, column=0, columnspan=3)
 		# Create the container of the page frames, it's a frame inside the root
@@ -69,8 +71,7 @@ class App(tk.Tk):
 		self.next_button = tk.Button(self, text="Next", width=10) # pass the function as thread in order to prevent the app from freezing
 		self.next_button.grid(row=3, column=1)
 		self.instantiate_page_frames()
-		first_page = self.pages[SelectModePage]
-		first_page.tkraise()
+		self.show_page(SelectModePage)
 
 	def show_settings_window(self):
 		"""
@@ -84,7 +85,7 @@ class App(tk.Tk):
 		This method instantiates all the page frames without choice-dependent customization
 		"""
 		self.pages = {} # create a dictionary with all the page objects (istantiations of respective classes)
-		for F in (InitializationPage, SelectModePage):
+		for F in (InitializationPage, SelectModePage, InputValuesPage):
 			# F(page_container_frame, root), pages must be instantiated in inverse order,
 			# because everyone needs the following one to be insantiated before itself
 			page_frame = F(self.page_container_frame, self)
@@ -111,6 +112,14 @@ class App(tk.Tk):
 		Description
 		"""
 		self.comm_label.config(text=text)
+
+	def show_page(self, page_name):
+		"""
+		Description
+		"""
+		page = self.pages[page_name]
+		page.page_setup()
+		page.tkraise()
 
 
 class SettingsWindow(tk.Toplevel):
@@ -158,7 +167,7 @@ class Page(tk.Frame):
 	def constant_page_setup(self):
 		pass
 
-	def variable_page_setup(self, *args, **kwargs):
+	def page_setup(self, *args, **kwargs):
 		pass
 
 	def back_method(self):
@@ -174,7 +183,6 @@ class SelectModePage(Page):
 	"""
 	def __init__(self, container_frame, root):
 		super().__init__(container_frame, root)
-		self.constant_page_setup()
 
 	def constant_page_setup(self):
 		"""
@@ -182,7 +190,7 @@ class SelectModePage(Page):
 		"""
 		# Constant root setup
 		# The root must be set up after the "mode" variable has been created (called in self.next_method())
-		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_state=tk.NORMAL)
+		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.NORMAL)
 		# Constant frame setup
 		self.mode = tk.StringVar()
 		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=self.mode, value="create_manual")
@@ -190,18 +198,18 @@ class SelectModePage(Page):
 		create_manual_rb.grid(row=0, column=0, padx=10, pady=4)
 		update_rb.grid(row=1, column=0, padx=10, pady=4)
 
+	def page_setup(self):
+		self.constant_page_setup()
+
 	@try_decorator
 	def next_method(self):
 		"""
 		Description
 		"""
-		#Get user inputs
-		mode = self.mode.get()
-		# Communication label reset
-		self.root.comm_label_write("")
-		next_page = self.root.pages[InitializationPage]
-		next_page.variable_page_setup(mode)
-		next_page.tkraise()
+		# Get user inputs
+		hp.mode = self.mode.get()
+		# Show next page
+		self.root.show_page(InitializationPage)
 
 
 class InitializationPage(Page):
@@ -210,12 +218,11 @@ class InitializationPage(Page):
 	"""
 	def __init__(self, container_frame, root):
 		super().__init__(container_frame, root)
-		self.constant_page_setup()
 
 	def constant_page_setup(self):
 		# Constant root setup
-		self.root.root_setup(head_text="Initialization Page", next_method=self.next_method,\
-		back_method=self.back_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
+		self.root.root_setup(head_text="Initialization Page", back_method=self.back_method,\
+		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 		# Constant frame setup
 		# The selected directory can be either the family directory
 		# (create manual mode) or the directory containing the files
@@ -227,7 +234,7 @@ class InitializationPage(Page):
 		self.browse_butt = tk.Button(self, text="Browse", width=10)
 		self.browse_butt.grid(row=0, column=2, padx=4, pady=4)
 
-	def variable_page_setup(self, mode):
+	def page_setup(self):
 		"""
 		SelectModePage setup for the root and the frame
 		"""
@@ -240,11 +247,11 @@ class InitializationPage(Page):
 				raise ValueError("Specified master program directory doesn't exist")
 			fam_dir_path = filedialog.askdirectory(initialdir=initialdir)
 			self.fam_dir = Path(fam_dir_path)
-			self.fam_name = self.fam_dir.name
-			self.browse_entry.insert(0, self.fam_dir)
+			self.browse_entry.insert(0, self.fam_dir.name)
 
 		# Variable frame setup
-		if mode == "create_manual":
+		if hp.mode == "create_manual":
+			self.constant_page_setup() # this must be inside the if loop, otherwise the setup is performed anyway
 			tool_name_label = tk.Label(self, text="Tool Name: ")
 			tool_name_label.grid(row=1, column=0, padx=4, pady=4)
 			self.tool_name_entry = tk.Entry(self, width=34)
@@ -253,8 +260,53 @@ class InitializationPage(Page):
 		else:
 			raise ValueError("Mode not supported yet")
 
-		def next_method(self):
-			pass
+	@try_decorator
+	def next_method(self):
+		try:
+			hp.config_file = hp.ConfigFile(self.fam_dir)
+			self.root.show_page(InputValuesPage)
+		except AttributeError:
+			raise ValueError("Select a folder")
+
+	def back_method(self):
+		self.root.show_page(SelectModePage)
+
+
+class InputValuesPage(Page):
+	"""
+	Description
+	"""
+	def __init__(self, container_frame, root):
+		super().__init__(container_frame, root)
+
+	def constant_page_setup(self):
+		# Constant root setup
+		self.root.root_setup(head_text="Input Values Page", back_method=self.back_method,\
+		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
+		# Constant frame setup
+		# The selected directory can be either the family directory
+		# (create manual mode) or the directory containing the files
+		# we want to change (update mode)
+		input_df = hp.config_file.input_df
+		# browse_label = tk.Label(self, text="Select Directory: ", width=16)
+		# browse_label.grid(row=0, column=0, padx=4, pady=4)
+		# self.browse_entry = tk.Entry(self, width=34)
+		# self.browse_entry.grid(row=0, column=1, padx=4, pady=4)
+		# self.browse_butt = tk.Button(self, text="Browse", width=10)
+		# self.browse_butt.grid(row=0, column=2, padx=4, pady=4)
+
+	def page_setup(self):
+		"""
+		Description
+		"""
+		self.constant_page_setup()
+
+	@try_decorator
+	def next_method(self):
+		pass
+
+	def back_method(self):
+		self.root.show_page(InitializationPage)
 
 	# def configure_root_and_next_page(self):
 	# 	"""

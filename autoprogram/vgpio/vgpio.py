@@ -37,6 +37,7 @@ for rw_table_series in RW_TABLE_SERIES:
 	RW_TABLES.loc[rw_table_series.name] = rw_table_series
 ALL_TABLES = R_TABLES.append(RW_TABLES) # Vgp_Data table must be read before the other ones
 SEPARATOR = "."
+DIGITS_NUM = 4
 
 
 class VgpData(pd.DataFrame):
@@ -60,6 +61,18 @@ class VgpData(pd.DataFrame):
 		sect_perc_ser.index = idx
 		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser})
 
+	@classmethod
+	def to_vgp_data_df(cls, names, raw_data):
+		"""
+		Description
+		"""
+		vgp_data_list = []
+		for name, raw_data_i in zip(names, raw_data):
+			val_i = raw_data_i[0]
+			sect_perc_i = raw_data_i[1]
+			vgp_data_list.append(cls(name, val_i, sect_perc_i))
+		return pd.concat(vgp_data_list)
+
 
 class VgpProgram(object):
 	"""
@@ -74,13 +87,13 @@ class VgpProgram(object):
 		# read DataFrame values from the .vgp file
 		self.con = sql.connect(self.path)
 		self.df_setup()
-		self.curr_diam = self[self.diam_name]
+		self.initial_diam = self[self.diam_name].val.iloc[0] # diameter name returns 2 values (it's a Parameter)
 		return self
 
 	def __exit__(self, exc_class, exc, traceback):
 		# write DataFrame values into the .vgp file
-		self.df_commit()
-		self.con.commit()
+		#self.df_commit()
+		#self.con.commit()
 		self.con.close()
 		pass
 
@@ -180,7 +193,7 @@ class VgpProgram(object):
 
 	def get_arguments_ser(self, name):
 		"""
-		Description
+		This method returns a series with two elements: the table and the address
 		"""
 		addr = self.get_addr(name)
 		table = self.get_table(addr)
@@ -225,26 +238,29 @@ class VgpProgram(object):
 			table = args_ser["table"]
 			addr = args_ser["addr"]
 			df_temp = self.df[table]
-			df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # val
-			# if (df_temp.sect_perc_col in df_temp.columns):
-			# 	df_temp.loc[[addr], [df_temp.sect_perc_col]] = vgp_data_df.loc[name, "sect_perc"].values # sect_perc
+			df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # substitutes val, keeping address indexing
+			if (df_temp.sect_perc_col in df_temp.columns):
+				df_temp.loc[[addr], [df_temp.sect_perc_col]] = vgp_data_df.loc[[name], ["sect_perc"]].values # substitutes sect_perc, keeping address indexing
 
-		# Argument homogeneization
+		# Arguments homogeneization
 		names = pd.Series(names)
-		data_df = pd.DataFrame.from_records(raw_data)
-		vgp_data_list = []
-		for name, [data_idx, data] in zip(names, data_df.iterrows()):
-			vgp_data = VgpData(name, data.iloc[0], data.iloc[1])
-			vgp_data_list.append(vgp_data)
-		vgp_data_df = pd.concat(vgp_data_list)
+		if not isinstance(raw_data, pd.DataFrame):
+			vgp_data_df = VgpData.to_vgp_data_df(names, raw_data)
+		else:
+			vgp_data_df = raw_data
+		# Setting data
 		names.apply(set_data)
 
-	def scale_tool(self, diam, scale_val_names):
+	def scale_tool(self, scale_val_names):
 		"""
-		Description
+		This method scales the specified input values (only the val field), by applying the ratio between the initial
+		diameter and the current diameter
 		"""
-		print(self[scale_val_names])
-		# self[scale_val_names] = (self[scale_val_names] / self.curr_diam * diam).round(4)
+		current_diam = self[self.diam_name].val.iloc[0] # diameter name returns 2 values (it's a Parameter)
+		scaled_vals = self[scale_val_names] # copy of initial values
+		scaled_vals.val = (scaled_vals.val / self.initial_diam * current_diam).round(DIGITS_NUM) # scale only the val field, taking 4 decimal digits
+		self[scale_val_names] = scaled_vals # set the scaled values
+		
 
 	# @classmethod
 	# def scale_tool(cls, self, diam, low_path, up_path):

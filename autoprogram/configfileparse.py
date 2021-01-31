@@ -15,6 +15,17 @@ SHEET_NAMES_1 = (SCALE_VALS_SH_NAME, INPUT_VALS_SH_NAME, REL_VALS_SH_NAME)
 SHEET_NAMES_2 = (FUNCT_VALS_1_SH_NAME, FUNCT_VALS_2_SH_NAME) # read all the rows but the first 3
 ALL_SHEET_NAMES = SHEET_NAMES_1 + SHEET_NAMES_2
 
+def try_decorator(next_method):
+	"""
+	This decorator is added to any confirm function, in order to print the error (if any) on the communication label
+	"""
+	def wrapper_function(*args, **kwargs):
+		try:
+			return next_method(*args, **kwargs)
+		except FileNotFoundError:
+			raise ValueError(f"No such a configuration file: {args[0]}")
+	return wrapper_function
+
 
 class ConfigFile(object):
 	"""
@@ -31,6 +42,7 @@ class ConfigFile(object):
 		#super().__init__({"input_vals_names": [input_vals_names], "input_vals_descr": [input_vals_descr]})
 
 	@property
+	@try_decorator
 	def diam_name(self):
 		"""
 		Description
@@ -39,15 +51,22 @@ class ConfigFile(object):
 		return diam_name_df.at[0, "diam_name"]
 
 	@property
-	def input_vals_df(self):
-		return pd.read_excel(self.path, sheet_name=DIAM_NAME_SH_NAME, dtype=str)
+	@try_decorator
+	def input_df(self):
+		return pd.read_excel(self.path, sheet_name=INPUT_VALS_SH_NAME, dtype=str)
+
+	@try_decorator
+	def get_master_prog_name(self, diam):
+		master_prog_select_df = pd.read_excel(self.path, sheet_name=MASTER_SELECT_SH_NAME, dtype={"low_diam": float, "up_diam": float, "master_prog_name": str})
+		filt = (master_prog_select_df.low_diam <= diam) & (master_prog_select_df.up_diam >= diam) # & performs element-wise evaluation
+		return master_prog_select_df.loc[filt, "master_prog_name"].iloc[0] + common.vgp_suffix
 	
 
-	def get_config_df(self):
-		config_df = {}
-		for sheet_name in ALL_SHEET_NAMES:
-			if sheet_name in SHEET_NAMES_1:
-				config_df[sheet_name] = pd.read_excel(self.path, sheet_name = sheet_name, dtype=str)
-			else:
-				config_df[sheet_name] = pd.read_excel(self.path, sheet_name = sheet_name, dtype=str, skiprows=(0, 2))
-		return config_df
+	# def get_config_df(self):
+	# 	config_df = {}
+	# 	for sheet_name in ALL_SHEET_NAMES:
+	# 		if sheet_name in SHEET_NAMES_1:
+	# 			config_df[sheet_name] = pd.read_excel(self.path, sheet_name = sheet_name, dtype=str)
+	# 		else:
+	# 			config_df[sheet_name] = pd.read_excel(self.path, sheet_name = sheet_name, dtype=str, skiprows=(0, 2))
+	# 	return config_df
