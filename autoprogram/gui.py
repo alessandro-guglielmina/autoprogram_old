@@ -3,6 +3,8 @@ from tkinter import ttk
 from tkinter import messagebox
 from tkinter import filedialog
 import threading
+import os
+from pathlib import Path
 
 from autoprogram import common
 from autoprogram import settingsparser as sp
@@ -47,7 +49,7 @@ class App(tk.Tk):
 		# The following widgets get their features from the specific page
 		# create an heading
 		self.mode = None
-		self.head_label = tk.Label(self, width=60, height=3)
+		self.head_label = tk.Label(self, width=70, height=3)
 		self.head_label.grid(row=0, column=0, columnspan=3)
 		# Create the container of the page frames, it's a frame inside the root
 		# (it's always the same frame because it's the one in the root)
@@ -63,7 +65,7 @@ class App(tk.Tk):
 		self.comm_label.grid(row=2, column=0, columnspan=3)
 		# Create navigation buttons
 		self.back_button = tk.Button(self, text="Back", width=10)
-		self.back_button.grid(row=3, column=0, padx=4)
+		self.back_button.grid(row=3, column=0, padx=20)
 		self.next_button = tk.Button(self, text="Next", width=10) # pass the function as thread in order to prevent the app from freezing
 		self.next_button.grid(row=3, column=1)
 		self.instantiate_page_frames()
@@ -218,22 +220,36 @@ class InitializationPage(Page):
 		# The selected directory can be either the family directory
 		# (create manual mode) or the directory containing the files
 		# we want to change (update mode)
-		self.browse_label = tk.Label(self, text="Select Directory: ", width=20)
-		self.browse_label.grid(row=0, column=0, padx=4, pady=4)
+		browse_label = tk.Label(self, text="Select Directory: ", width=16)
+		browse_label.grid(row=0, column=0, padx=4, pady=4)
+		self.browse_entry = tk.Entry(self, width=34)
+		self.browse_entry.grid(row=0, column=1, padx=4, pady=4)
 		self.browse_butt = tk.Button(self, text="Browse", width=10)
-		self.browse_butt.grid(row=0, column=1, padx=4, pady=4)
+		self.browse_butt.grid(row=0, column=2, padx=4, pady=4)
 
 	def variable_page_setup(self, mode):
 		"""
 		SelectModePage setup for the root and the frame
 		"""
+		@try_decorator
+		def decorated_askdirectory(self, initialdir):
+			"""
+			Description
+			"""
+			if not os.path.isdir(initialdir):
+				raise ValueError("Specified master program directory doesn't exist")
+			fam_dir_path = filedialog.askdirectory(initialdir=initialdir)
+			self.fam_dir = Path(fam_dir_path)
+			self.fam_name = self.fam_dir.name
+			self.browse_entry.insert(0, self.fam_dir)
+
 		# Variable frame setup
 		if mode == "create_manual":
-			self.tool_name_label = tk.Label(self, text="Tool Name: ", width=20)
-			self.tool_name_label.grid(row=1, column=0, padx=4, pady=4)
-			self.tool_name_entry = tk.Entry(self)
+			tool_name_label = tk.Label(self, text="Tool Name: ")
+			tool_name_label.grid(row=1, column=0, padx=4, pady=4)
+			self.tool_name_entry = tk.Entry(self, width=34)
 			self.tool_name_entry.grid(row=1, column=1, padx=4, pady=4)
-			self.browse_butt.config(command=lambda: threading.Thread(target=filedialog.askdirectory(initialdir=common.master_progs_dir)).start())
+			self.browse_butt.config(command=lambda: threading.Thread(target=decorated_askdirectory(self, common.master_progs_dir)).start())
 		else:
 			raise ValueError("Mode not supported yet")
 

@@ -14,6 +14,7 @@ WHEEL_CURVE_NAME = "Rollomatic.LibCurve.Data.Curves.WheelProfileCurve"
 
 try:
 	NAMES_MAP_DF = pd.read_excel(NAMES_MAP_PATH, sheet_name = NAMES_MAP_SHEET_NAME, dtype=str)
+	NAMES_MAP_DF.name = "names mapper"
 except FileNotFoundError:
  	raise ValueError(f"No such an address mapper file: {NAMES_MAP_FILENAME}")
 
@@ -73,6 +74,7 @@ class VgpProgram(object):
 		# read DataFrame values from the .vgp file
 		self.con = sql.connect(self.path)
 		self.df_setup()
+		self.curr_diam = self[self.diam_name]
 		return self
 
 	def __exit__(self, exc_class, exc, traceback):
@@ -125,11 +127,10 @@ class VgpProgram(object):
 		"""
 		Description
 		"""
-		if df_arg.name in RW_TABLES.index:
-			if df_arg.name == PARAMETER.name:
-				self.set_Parameter_idxs(df_arg)
-			else:
-				self.set_Value_idxs(df_arg)
+		if df_arg.name == PARAMETER.name:
+			self.set_Parameter_idxs(df_arg)
+		else:
+			self.set_Value_idxs(df_arg)
 
 	def df_setup(self):
 		"""
@@ -145,7 +146,8 @@ class VgpProgram(object):
 			df_temp.id_col = table.id_col
 			df_temp.sect_perc_col = table.sect_perc_col
 			df_temp.val_col = table.val_col
-			self.df_set_idxs(df_temp) # addresses are set to be indexes by this inplace method
+			if table_name in RW_TABLES.index: # in r/w tables, addresses are set to be indexes by this inplace method (read only tables are read before)
+				self.df_set_idxs(df_temp) # addresses are set to be indexes by this inplace method
 			self.df[table_name] = df_temp
 		del df_temp
 				
@@ -193,7 +195,10 @@ class VgpProgram(object):
 			table = args_ser["table"]
 			addr = args_ser["addr"]
 			df_temp = self.df[table]
-			val = df_temp.loc[[addr], [df_temp.val_col]]
+			try:
+				val = df_temp.loc[[addr], [df_temp.val_col]]
+			except KeyError:
+				raise ValueError(f"No such a value name in the program: {name}")
 			if (df_temp.sect_perc_col in df_temp.columns):
 				sect_perc = df_temp.loc[[addr], [df_temp.sect_perc_col]]
 			else:
@@ -234,54 +239,61 @@ class VgpProgram(object):
 		vgp_data_df = pd.concat(vgp_data_list)
 		names.apply(set_data)
 
-	@classmethod
-	def scale_tool(cls, self, diam, low_path, up_path):
+	def scale_tool(self, diam, scale_val_names):
 		"""
 		Description
 		"""
-		def scale(diam, low_diam, low_ser, up_diam, up_ser):
-			"""
-			Description
-			"""
-			def round_to_significant_figures(num, sf):
-				"""
-				Description
-				"""
-				try:
-					return round(num, sf - 1 - int(math.floor(math.log10(abs(num)))))
-				except ValueError:
-					return num
+		print(self[scale_val_names])
+		# self[scale_val_names] = (self[scale_val_names] / self.curr_diam * diam).round(4)
 
-			if diam > up_diam or diam < low_diam:
-				raise ValueError("No value scaling is possible with the passed programs")
-			delta_diam = up_diam - low_diam
-			low_delta = diam - low_diam
-			up_delta = up_diam - diam
-			low_coeff = 1 - low_delta / delta_diam
-			up_coeff = 1 - up_delta / delta_diam
-			res = low_ser * low_coeff + up_ser * up_coeff
-			return res.apply(lambda num: round_to_significant_figures(num, 5)) # round values to 5 significant figures
+	# @classmethod
+	# def scale_tool(cls, self, diam, low_path, up_path):
+	# 	"""
+	# 	Description
+	# 	"""
+	# 	def scale(diam, low_diam, low_ser, up_diam, up_ser):
+	# 		"""
+	# 		Description
+	# 		"""
+	# 		def round_to_significant_figures(num, sf):
+	# 			"""
+	# 			Description
+	# 			"""
+	# 			try:
+	# 				return round(num, sf - 1 - int(math.floor(math.log10(abs(num)))))
+	# 			except ValueError:
+	# 				return num
 
-		low_prog = cls(low_path, self.diam_name)
-		up_prog = cls(up_path, self.diam_name)
-		with low_prog, up_prog:
-			low_diam = low_prog[low_prog.diam_name].val.iloc[0]
-			up_diam = up_prog[up_prog.diam_name].val.iloc[0]
-			for table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND): # only these tables are scaled
-				df_temp = self.df[table.name]
-				# Parameter values relative to wheel geometry are not scaled
-				if table.name == PARAMETER.name:
-					curve_df = self.df[CURVE.name]
-					is_wheel_func = lambda PA_CurveId: True\
-									if self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME\
-									else False
-					is_wheel_filt = df_temp.PA_CurveId.apply(is_wheel_func)
-					df_temp.loc[is_wheel_filt, table.val_col] = scale(diam, low_diam,\
-					low_prog.df[table.name].loc[is_wheel_filt, table.val_col], up_diam, up_prog.df[table.name].loc[is_wheel_filt, table.val_col])
-				else:
-					df_temp[table.val_col] = scale(diam, low_diam,\
-					low_prog.df[table.name][table.val_col], up_diam, up_prog.df[table.name][table.val_col])
-				# VGP_Value_FunctionD values are scaled also with respect to the sect_per column
-				if table.name == VGP_VALUE_FUNCTIOND.name:
-					df_temp[table.sect_perc_col] = scale(diam, low_diam,\
-					low_prog.df[table.name][table.sect_perc_col], up_diam, up_prog.df[table.name][table.sect_perc_col])
+	# 		if diam > up_diam or diam < low_diam:
+	# 			raise ValueError("No value scaling is possible with the passed programs")
+	# 		delta_diam = up_diam - low_diam
+	# 		low_delta = diam - low_diam
+	# 		up_delta = up_diam - diam
+	# 		low_coeff = 1 - low_delta / delta_diam
+	# 		up_coeff = 1 - up_delta / delta_diam
+	# 		res = low_ser * low_coeff + up_ser * up_coeff
+	# 		return res.apply(lambda num: round_to_significant_figures(num, 5)) # round values to 5 significant figures
+
+	# 	low_prog = cls(low_path, self.diam_name)
+	# 	up_prog = cls(up_path, self.diam_name)
+	# 	with low_prog, up_prog:
+	# 		low_diam = low_prog[low_prog.diam_name].val.iloc[0]
+	# 		up_diam = up_prog[up_prog.diam_name].val.iloc[0]
+	# 		for table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND): # only these tables are scaled
+	# 			df_temp = self.df[table.name]
+	# 			# Parameter values relative to wheel geometry are not scaled
+	# 			if table.name == PARAMETER.name:
+	# 				curve_df = self.df[CURVE.name]
+	# 				is_wheel_func = lambda PA_CurveId: True\
+	# 								if self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME\
+	# 								else False
+	# 				is_wheel_filt = df_temp.PA_CurveId.apply(is_wheel_func)
+	# 				df_temp.loc[is_wheel_filt, table.val_col] = scale(diam, low_diam,\
+	# 				low_prog.df[table.name].loc[is_wheel_filt, table.val_col], up_diam, up_prog.df[table.name].loc[is_wheel_filt, table.val_col])
+	# 			else:
+	# 				df_temp[table.val_col] = scale(diam, low_diam,\
+	# 				low_prog.df[table.name][table.val_col], up_diam, up_prog.df[table.name][table.val_col])
+	# 			# VGP_Value_FunctionD values are scaled also with respect to the sect_per column
+	# 			if table.name == VGP_VALUE_FUNCTIOND.name:
+	# 				df_temp[table.sect_perc_col] = scale(diam, low_diam,\
+	# 				low_prog.df[table.name][table.sect_perc_col], up_diam, up_prog.df[table.name][table.sect_perc_col])
