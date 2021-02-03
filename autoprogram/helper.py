@@ -1,8 +1,26 @@
+import tkinter as tk
 from autoprogram import configfileparse as cfp
+
+fam_dir_path = None
 
 class ConfigFile(cfp.ConfigFile):
 	def __init__(self, fam_dir_path):
 		super().__init__(fam_dir_path)
+
+def grid_val_entries(page_frame, val_descrs, val_entries):
+	"""
+	Description
+	"""
+	for i, (val_descr, val_entry) in enumerate(zip(val_descrs, val_entries)):
+		val_label = tk.Label(page_frame, text=val_descr, width=20)
+		val_label.grid(row=i, column=0, pady=4)
+		val_entry.grid(row=i, column=1, pady=4)
+
+def get_inp_vals(val_entries):
+	"""
+	Description
+	"""
+	return [val_entry.get() for val_entry in val_entries]
 
 # # from pathlib import Path
 # # import glob

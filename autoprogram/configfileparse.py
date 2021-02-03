@@ -33,6 +33,7 @@ class ConfigFile(object):
 	"""
 	def __init__(self, fam_dir_path):
 		self.path = Path(fam_dir_path).joinpath(CONFIG_FILE_FILENAME)
+		self.input_df = pd.read_excel(self.path, sheet_name=INPUT_VALS_SH_NAME, dtype=str)
 		# self.get_master_select_df()
 		#self.config_df = self.get_config_df()
 		#diam_name = self.df[COMMON_OD_SH_NAME].at[0, "diam_name"]
@@ -42,7 +43,7 @@ class ConfigFile(object):
 		#super().__init__({"input_vals_names": [input_vals_names], "input_vals_descr": [input_vals_descr]})
 
 	@property
-	@try_decorator
+	#@try_decorator
 	def diam_name(self):
 		"""
 		Description
@@ -50,15 +51,10 @@ class ConfigFile(object):
 		diam_name_df = pd.read_excel(self.path, sheet_name=DIAM_NAME_SH_NAME, dtype=str)
 		return diam_name_df.at[0, "diam_name"]
 
-	@property
-	@try_decorator
-	def input_df(self):
-		return pd.read_excel(self.path, sheet_name=INPUT_VALS_SH_NAME, dtype=str)
-
-	@try_decorator
-	def get_master_prog_name(self, diam):
+	#@try_decorator
+	def get_master_prog_name(self, diam_val):
 		master_prog_select_df = pd.read_excel(self.path, sheet_name=MASTER_SELECT_SH_NAME, dtype={"low_diam": float, "up_diam": float, "master_prog_name": str})
-		filt = (master_prog_select_df.low_diam <= diam) & (master_prog_select_df.up_diam >= diam) # & performs element-wise evaluation
+		filt = (master_prog_select_df.low_diam <= diam_val) & (master_prog_select_df.up_diam >= diam_val) # & performs element-wise evaluation
 		return master_prog_select_df.loc[filt, "master_prog_name"].iloc[0] + common.vgp_suffix
 	
 
