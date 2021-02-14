@@ -87,7 +87,7 @@ class App(tk.Tk):
 		This method instantiates all the page frames without choice-dependent customization
 		"""
 		self.pages = {} # create a dictionary with all the page objects (istantiations of respective classes)
-		for F in (InitializationPage, SelectModePage, InputValuesPage, CreateProgramPage):
+		for F in (InitializationPage, SelectModePage, InputDataPage, CreateProgramPage):
 			# F(page_container_frame, root), pages must be instantiated in inverse order,
 			# because everyone needs the following one to be insantiated before itself
 			page_frame = F(self.page_container_frame, self)
@@ -265,7 +265,7 @@ class InitializationPage(Page):
 
 	@try_decorator
 	def next_method(self, fam_dir_path):
-		self.root.show_page(InputValuesPage, hp.fam_dir_path)
+		self.root.show_page(InputDataPage, hp.fam_dir_path)
 
 	@try_decorator
 	def back_method(self):
@@ -273,7 +273,7 @@ class InitializationPage(Page):
 		self.root.show_page(SelectModePage)
 
 
-class InputValuesPage(Page):
+class InputDataPage(Page):
 	"""
 	Description
 	"""
@@ -286,20 +286,22 @@ class InputValuesPage(Page):
 		"""
 		# Configuration file initialization
 		try:
-			hp.config_file = hp.ConfigFile(fam_dir_path)
+			hp.config_data = hp.ConfigData(fam_dir_path)
 		except TypeError:
 			raise ValueError("Select a folder")
-		# Values labels and entries grid
-		val_descrs = hp.config_file.input_df.val_descr
-		val_entries = [tk.Entry(self, width=20) for i in val_descrs] # add empty entry column to input database
-		hp.grid_val_entries(self, val_descrs, val_entries)
+		hp.grid_gui_data_entries(self)
 		self.root.root_setup(head_text="Input Values Page", back_method=self.back_method,\
-		next_method=self.next_method, next_method_args=[val_entries], back_state=tk.NORMAL, next_state=tk.NORMAL)
+		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 
 	# @try_decorator
-	def next_method(self, val_entries):
-		hp.inp_vals = hp.get_inp_vals(val_entries)
-		hp.config_file.input_df["inp_val"] = hp.inp_vals
+	def next_method(self):
+		# Acquire input data
+		if hp.mode == "create_manual":
+			raw_inp_data = hp.config_data.get_gui_raw_data(self)
+		else:
+			raise ValueError("Mode not supported yet")
+		# Save input data inside config_data.input_df
+		hp.config_data.save_input_data(raw_inp_data)
 		self.root.show_page(CreateProgramPage)
 
 	@try_decorator
@@ -319,27 +321,27 @@ class CreateProgramPage(Page):
 		"""
 		Description
 		"""
+		# Set diameter value
+		hp.set_diam_val()
 		# Master selection
-		filt = hp.config_file.input_df.val_name == hp.config_file.diam_name
-		diam_val = float(hp.config_file.input_df.loc[filt, "inp_val"].values[0])
-		master_prog_name = hp.config_file.get_master_prog_name(diam_val)
-		master_prog_path = hp.fam_dir_path.joinpath(master_prog_name)
-		master_prog = vgpio.VgpProgram(master_prog_path, hp.config_file.diam_name)
-		# Input values update
-		# Value scaling
-		# Relationships update
-		# Function values update
+		master_prog = hp.select_master_prog()
+
+		with master_prog:
+			# 1) Input values update
+			hp.set_input_data(master_prog)
+
+			# 3) Value scaling
+			master_prog.scale_tool(hp.config_data.diam_val)
+			# 4) Relationships update
+			# 5) Function values update
 
 	@try_decorator
 	def next_method(self, val_entries):
-		hp.inp_vals = hp.get_inp_vals(val_entries)
-		hp.config_file.input_df["inp_val"] = hp.inp_vals
-		print(hp.config_file.input_df)
+		pass
 
 	@try_decorator
 	def back_method(self):
-		hp.fam_dir_path = None
-		self.root.show_page(InitializationPage)
+		pass
 
 	# def configure_root_and_next_page(self):
 	# 	"""

@@ -66,12 +66,25 @@ class VgpData(pd.DataFrame):
 		"""
 		Description
 		"""
-		vgp_data_list = []
-		for name, raw_data_i in zip(names, raw_data):
-			val_i = raw_data_i[0]
-			sect_perc_i = raw_data_i[1]
-			vgp_data_list.append(cls(name, val_i, sect_perc_i))
-		return pd.concat(vgp_data_list)
+		# list type raw data are in the form [(val1, np.nan), ([val21-val22], [sect_perc21-sect_perc22]), ...]
+		if isinstance(raw_data, list):
+			vgp_data_list = []
+			for name, raw_data_i in zip(names, raw_data):
+				val_i = raw_data_i[0]
+				sect_perc_i = raw_data_i[1]
+				vgp_data_list.append(cls(name, val_i, sect_perc_i))
+			return pd.concat(vgp_data_list)
+		# pd.DataFrame raw data are in the form pd.DataFrame({inp_val: [val1, val21-val22, ...], inp_sect_perc: [np.nan, sect_perc21-sect_perc22, ...]}
+		elif isinstance(raw_data, pd.DataFrame):
+			vgp_data_list = []
+			for name, (row_idx, raw_data_i) in zip(names, raw_data.iterrows()): # using zip and iterrows needs this kind of unpacking
+				val_i = raw_data_i.iloc[0]
+				sect_perc_i = raw_data_i.iloc[1]
+				vgp_data_list.append(cls(name, val_i, sect_perc_i))
+			return pd.concat(vgp_data_list)
+		else:
+			raise TypeError("Data type not supported")
+
 
 
 class VgpProgram(object):
@@ -171,8 +184,8 @@ class VgpProgram(object):
 		for table_name, table in RW_TABLES.iterrows():
 			# Reset Parameter values to be string in order to not alter the original .vgp file data types
 			df_temp = self.df[table_name]
-			if table_name == PARAMETER.name:
-					df_temp[table.val_col] = df_temp[table.val_col].astype("str") # Parameter values are reset to string type
+			# if table_name == PARAMETER.name:
+			# 		df_temp[table.val_col] = df_temp[table.val_col].astype("str") # Parameter values are reset to string type
 			df_temp.to_sql(table.name, self.con, if_exists='replace', index=False)
 		del df_temp, self.df
 
@@ -234,20 +247,39 @@ class VgpProgram(object):
 		Description
 		"""
 		def set_data(name):
-			args_ser = self.get_arguments_ser(name) # get a DataFrame contining table and address correspondent to the name
+			args_ser = self.get_arguments_ser(name) # get a DataFrame containing table and address correspondent to the name
 			table = args_ser["table"]
 			addr = args_ser["addr"]
 			df_temp = self.df[table]
-			df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # substitutes val, keeping address indexing
-			if (df_temp.sect_perc_col in df_temp.columns):
-				df_temp.loc[[addr], [df_temp.sect_perc_col]] = vgp_data_df.loc[[name], ["sect_perc"]].values # substitutes sect_perc, keeping address indexing
+			print(name)
+			print("LOOK HERE")
+			set_values = vgp_data_df.loc[[name], ["val"]].values
+			set_sect_percs = vgp_data_df.loc[[name], ["sect_perc"]].values
+			# Cast values and set data depending on table
+			# Parameter
+			if table == PARAMETER.name:
+				set_values = [float(set_value) for set_value in set_values] # cast data
+				df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
+			# VGP_Value_Double
+			elif table == VGP_VALUE_DOUBLE.name:
+				set_values = [float(set_value) for set_value in set_values] # cast data
+				df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
+			# VGP_Value_FunctionD
+			elif table == VGP_VALUE_FUNCTIOND.name:
+				set_values = [float(set_value) for set_value in set_values] # cast data
+				set_sect_percs = [float(set_sect_perc) for set_sect_perc in set_sect_percs]
+				df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
+				df_temp.loc[[addr], [df_temp.sect_perc_col]] = set_sect_percs # set sect perc
+			# VGP_Value_Int
+			elif table == VGP_VALUE_INT.name:
+				set_values = [int(set_value) for set_value in set_values]
+				df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # set values
+			else:
+				raise ValueError("Data type not supported")
 
 		# Arguments homogeneization
 		names = pd.Series(names)
-		if not isinstance(raw_data, pd.DataFrame):
-			vgp_data_df = VgpData.to_vgp_data_df(names, raw_data)
-		else:
-			vgp_data_df = raw_data
+		vgp_data_df = VgpData.to_vgp_data_df(names, raw_data)
 		# Setting data
 		names.apply(set_data)
 
