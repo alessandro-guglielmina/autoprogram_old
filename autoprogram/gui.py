@@ -329,11 +329,11 @@ class CreateProgramPage(Page):
 		with master_prog:
 			# 1) Input values update
 			hp.set_input_data(master_prog)
-
-			# 3) Value scaling
-			master_prog.scale_tool(hp.config_data.diam_val)
-			# 4) Relationships update
-			# 5) Function values update
+			# 2) Value scaling
+			master_prog.scale_tool(hp.config_data.diam_name)
+			# 3) Relationships update
+			
+			# 4) Function values update
 
 	@try_decorator
 	def next_method(self, val_entries):

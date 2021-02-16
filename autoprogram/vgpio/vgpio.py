@@ -233,7 +233,6 @@ class VgpProgram(object):
 				sect_perc_list = [np.nan for i in val.iterrows()]
 				addr_list = [addr for i in val.iterrows()]
 				sect_perc = pd.DataFrame(sect_perc_list, index=addr_list)
-
 			return VgpData(name, val, sect_perc)
 
 		names = pd.Series(names)
@@ -251,8 +250,6 @@ class VgpProgram(object):
 			table = args_ser["table"]
 			addr = args_ser["addr"]
 			df_temp = self.df[table]
-			print(name)
-			print("LOOK HERE")
 			set_values = vgp_data_df.loc[[name], ["val"]].values
 			set_sect_percs = vgp_data_df.loc[[name], ["sect_perc"]].values
 			# Cast values and set data depending on table
