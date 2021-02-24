@@ -1,6 +1,9 @@
 import tkinter as tk
+import shutil
+
 from autoprogram import configdataparse as cdp
-from autoprogram.vgpio import vgpio
+from autoprogram.openvgp import vgpio
+from autoprogram import common
 
 fam_dir_path = None
 # config_data = None
@@ -13,14 +16,19 @@ def set_diam_val():
 	filt = config_data.input_df.data_name == config_data.diam_name
 	config_data.diam_val = float(config_data.input_df.loc[filt, "inp_val"].values[0])
 
-def select_master_prog():
+def get_res_prog():
 	"""
 	Description
 	"""
 	master_prog_name = config_data.get_master_prog_name(config_data.diam_val)
 	master_prog_path = fam_dir_path.joinpath(master_prog_name)
-	master_prog = vgpio.VgpProgram(master_prog_path, config_data.diam_name)
-	return master_prog
+	res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
+	try:
+		shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
+	except FileNotFoundError as fnfe:
+		raise ValueError(f"No such result directory: {common.res_progs_dir}")
+	res_prog = vgpio.VgpProgram(res_prog_path, config_data.diam_name)
+	return res_prog
 
 def grid_gui_data_entries(input_data_page):
 	for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.input_df.data_name, config_data.input_df.data_descr)):
@@ -31,7 +39,7 @@ def grid_gui_data_entries(input_data_page):
 
 def set_input_data(master_prog):
 	"""
-	Description
+	This method updates the input data coming from the input_df DataFrame in the program
 	"""
 	master_prog[config_data.input_df.data_name.to_list()] = config_data.input_df.loc[:, ["inp_val", "inp_sect_perc"]]
 

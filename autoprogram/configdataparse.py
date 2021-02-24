@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import tkinter as tk
+import re
 
 from autoprogram import common
 
@@ -18,6 +19,7 @@ SHEET_NAMES_2 = (FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME) # read all the rows
 ALL_SHEET_NAMES = SHEET_NAMES_1 + SHEET_NAMES_2
 VGP_DATA_SEP = ","
 VAL_FUND_SEP = "-"
+AUX_STR = "AUXILIARY"
 
 def try_decorator(next_method):
 	"""
@@ -76,7 +78,47 @@ class ConfigData(object):
 		except IndexError:
 			raise ValueError("No master program for such a diameter")
 
+	def update_relationships(self, res_prog):
+		"""
+		In this method, for each relationship, data names are substituted with their correspondent data from the program
+		and then updated in the program itself
+		"""
+		def get_rel_scalar_val(data_name_ser: pd.Series) -> str:
+			"""
+			This method get the values to put into the relations, data can be get from the program or from the input values if they are auxiliary (not updated in the program)
+			"""
+			data_name = data_name_ser.iloc[0]
+			# if the relation refers to an auxiliary parameter looks into the input_df
+			if AUX_STR in data_name.upper():
+				filt = self.input_df["data_name"] == data_name
+				val = self.input_df.loc[filt, "inp_val"].iloc[0]
+			else:
+				# otherwise looks directly in the progam
+				val = res_prog[data_name].iloc[0, 0] # get the "val" field of the data returned from the program
+				# if the returned value is not a scalar it's converted to scalar (values must be constant to have sense)
+				if hasattr(val, "__len__"):
+					val = val[0]
+			return val
+
+		rel_df = self.config_data_df[REL_DATA_SH_NAME].astype(str)
+		for rel_idx, rel_row in rel_df.iterrows():
+			if AUX_STR not in rel_row.data_name.upper(): # if it's not an auxiliary data
+				rel_expr = rel_row.rel
+				data_names = re.findall(r'\$(.*?)\$', rel_expr) # get a list with all the data names in the expression
+				sub_data_df = pd.DataFrame(data_names, columns=["data_name"])
+				sub_data_df[["scalar_val"]] = sub_data_df.apply(get_rel_scalar_val, axis=1) # get values from the program and convert to scalar (in order to apply relations)
+				for idx, (data_name, scalar_val) in sub_data_df.iterrows():
+					rel_expr = re.sub(r'\${}\$'.format(data_name), str(scalar_val), rel_expr)
+					rel_assign = "raw_rel_val = " + rel_expr # the relation value is assigned to the variable "raw_rel_val"
+					res_prog[data_name] = raw_rel_val
+
+
+			# rel = re.sub(r'\${}\$'.format(arg_name), str(arg_val), rel_exp)
+
 	def get_gui_raw_data(self, input_data_page):
+		"""
+		This method collect the raw string inputs inserted by the user
+		"""
 		raw_inp_data_list = []
 		for inp_data_name in self.input_df.data_name:
 			data_entry = input_data_page.nametowidget(ConfigData.to_widget_name(inp_data_name))
@@ -85,7 +127,9 @@ class ConfigData(object):
 		return pd.Series(raw_inp_data_list)
 
 	def save_input_data(self, raw_inp_data: pd.Series):
-		#print("raw_inp_data: ", raw_inp_data)
+		"""
+		This method writes the input data in the self.input_df DataFrame
+		"""
 		vgp_inp_data = raw_inp_data.str.split(VGP_DATA_SEP, n=1, expand=True)
 		self.input_df["inp_val"] = vgp_inp_data.loc[:, 0]
 		try:

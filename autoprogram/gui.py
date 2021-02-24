@@ -259,13 +259,14 @@ class InitializationPage(Page):
 			self.browse_butt.config(command=lambda: threading.Thread(target=decorated_askdirectory(self, common.master_progs_dir)).start())
 			# Constant root setup (independent from the selected mode)
 			self.root.root_setup(head_text="Initialization Page", back_method=self.back_method,\
-			next_method=self.next_method, next_method_args=[hp.fam_dir_path], back_state=tk.NORMAL, next_state=tk.NORMAL)
+			next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 		else:
 			raise ValueError("Mode not supported yet")
 
 	@try_decorator
-	def next_method(self, fam_dir_path):
-		self.root.show_page(InputDataPage, hp.fam_dir_path)
+	def next_method(self):
+		self.root.show_page(InputDataPage)
+		hp.res_prog_name = self.tool_name_entry.get()
 
 	@try_decorator
 	def back_method(self):
@@ -280,17 +281,17 @@ class InputDataPage(Page):
 	def __init__(self, container_frame, root):
 		super().__init__(container_frame, root)
 
-	def page_setup(self, fam_dir_path):
+	def page_setup(self):
 		"""
 		Description
 		"""
 		# Configuration file initialization
 		try:
-			hp.config_data = hp.ConfigData(fam_dir_path)
+			hp.config_data = hp.ConfigData(hp.fam_dir_path)
 		except TypeError:
 			raise ValueError("Select a folder")
 		hp.grid_gui_data_entries(self)
-		self.root.root_setup(head_text="Input Values Page", back_method=self.back_method,\
+		self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 
 	# @try_decorator
@@ -323,14 +324,14 @@ class CreateProgramPage(Page):
 		"""
 		# Set diameter value
 		hp.set_diam_val()
-		# Master selection
-		master_prog = hp.select_master_prog()
+		# Select the master program and copy it to the result directory
+		res_prog = hp.get_res_prog()
 
-		with master_prog:
+		with res_prog:
 			# 1) Input values update
-			hp.set_input_data(master_prog)
+			hp.set_input_data(res_prog)
 			# 2) Value scaling
-			master_prog.scale_tool(hp.config_data.diam_name)
+			res_prog.scale_tool(hp.config_data.diam_name)
 			# 3) Relationships update
 			
 			# 4) Function values update
