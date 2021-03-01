@@ -13,6 +13,9 @@ class ConfigData(cdp.ConfigData):
 		super().__init__(fam_dir_path)
 
 def set_diam_val():
+	"""
+	Description
+	"""
 	filt = config_data.input_df.data_name == config_data.diam_name
 	config_data.diam_val = float(config_data.input_df.loc[filt, "inp_val"].values[0])
 
@@ -31,17 +34,14 @@ def get_res_prog():
 	return res_prog
 
 def grid_gui_data_entries(input_data_page):
+	"""
+	Description
+	"""
 	for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.input_df.data_name, config_data.input_df.data_descr)):
 		inp_data_entry = tk.Entry(input_data_page, width=20, name=ConfigData.to_widget_name(inp_data_name))
 		inp_data_label = tk.Label(input_data_page, width=20, text=inp_data_descr)
 		inp_data_entry.grid(row=i, column=1, padx=4, pady=4)
 		inp_data_label.grid(row=i, column=0, padx=4, pady=4)
-
-def set_input_data(master_prog):
-	"""
-	This method updates the input data coming from the input_df DataFrame in the program
-	"""
-	master_prog[config_data.input_df.data_name.to_list()] = config_data.input_df.loc[:, ["inp_val", "inp_sect_perc"]]
 
 # # from pathlib import Path
 # # import glob

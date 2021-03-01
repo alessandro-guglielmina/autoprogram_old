@@ -42,7 +42,7 @@ DIGITS_NUM = 4
 
 class VgpData(pd.DataFrame):
 	"""
-	Description
+	This dtype is a DataFrame with one row and two columns: "val" and "sect_perc" 
 	"""
 	def __init__(self, name, val, sect_perc=None):
 		if isinstance(sect_perc, pd.DataFrame) and isinstance(val, pd.DataFrame):
@@ -56,15 +56,15 @@ class VgpData(pd.DataFrame):
 			sect_perc_ser = pd.Series(np.nan)
 		else:
 			raise ValueError("Wrong VgpData arguments")
-		idx = pd.Index([name]).repeat(val_ser.size)
-		val_ser.index = idx
-		sect_perc_ser.index = idx
+		name_idx = pd.Index([name]).repeat(val_ser.size)
+		val_ser.index = name_idx
+		sect_perc_ser.index = name_idx
 		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser})
 
 	@classmethod
 	def to_vgp_data_df(cls, names, raw_data):
 		"""
-		Description
+		This method convert raw data in a certain format (specified below) to vgp data and pack them in a single DataFrame
 		"""
 		# list type raw data are in the form [(val1, np.nan), ([val21-val22], [sect_perc21-sect_perc22]), ...]
 		if isinstance(raw_data, list):
@@ -105,8 +105,8 @@ class VgpProgram(object):
 
 	def __exit__(self, exc_class, exc, traceback):
 		# write DataFrame values into the .vgp file
-		#self.df_commit()
-		#self.con.commit()
+		self.df_commit()
+		self.con.commit()
 		self.con.close()
 		pass
 
@@ -125,12 +125,9 @@ class VgpProgram(object):
 
 	def set_Parameter_idxs(self, Parameter_df): 
 		"""
-		Description
+		This method takes a Parameter type DataFrame and set the index as the correspondent names, by looking at the Curve table
 		"""
 		def Parameter_addrs_builder(Parameter_df_row):
-			"""
-			Description
-			"""
 			curve_df = self.df["Curve"]
 			curve_type = self.elem_wise_query(curve_df, curve_df.id_col, Parameter_df_row.PA_CurveId, curve_df.val_col)
 			return curve_type + SEPARATOR + Parameter_df_row.PA_Name
@@ -140,7 +137,7 @@ class VgpProgram(object):
 
 	def set_Value_idxs(self, Value_df):
 		"""
-		Description
+		This method takes a Value type DataFrame and set the index as the correspondent names, by looking at the VGP_Data table
 		"""
 		vgp_data_df = self.df["VGP_Data"]
 		get_Value_addrs = lambda Value_df_row: self.elem_wise_query(vgp_data_df, vgp_data_df.id_col, Value_df_row.D_Id, vgp_data_df.val_col)
@@ -151,7 +148,8 @@ class VgpProgram(object):
 
 	def df_set_idxs(self, df_arg):
 		"""
-		Description
+		This method takes a DataFrame (either with Parameter of Value type data) and set the index with
+		correspondent names, calling self.set_Parameter_idxs and self.set_Value_idxs methods
 		"""
 		if df_arg.name == PARAMETER.name:
 			self.set_Parameter_idxs(df_arg)
@@ -179,25 +177,25 @@ class VgpProgram(object):
 				
 	def df_commit(self):
 		"""
-		Description
+		This method writes the DataFrame into database tables
 		"""
 		for table_name, table in RW_TABLES.iterrows():
 			# Reset Parameter values to be string in order to not alter the original .vgp file data types
 			df_temp = self.df[table_name]
-			# if table_name == PARAMETER.name:
-			# 		df_temp[table.val_col] = df_temp[table.val_col].astype("str") # Parameter values are reset to string type
+			if table_name == PARAMETER.name:
+					df_temp[table.val_col] = df_temp[table.val_col].astype("str") # Parameter values are reset to string type
 			df_temp.to_sql(table.name, self.con, if_exists='replace', index=False)
 		del df_temp, self.df
 
 	def get_addr(self, name):
 		"""
-		Description
+		This method returns the address from the name, by looking at the names mapper file
 		"""
 		return self.elem_wise_query(NAMES_MAP_DF, "val_name", name, "val_addr")
 
 	def get_table(self, addr):
 		"""
-		Description
+		This method returns the table from the address
 		"""
 		try:
 			return self.elem_wise_query(self.df[VGP_DATA.name], VGP_DATA.val_col, addr, "VGP_Value_Type")
@@ -214,7 +212,7 @@ class VgpProgram(object):
 
 	def __getitem__(self, names):
 		"""
-		Description
+		This method get the selected data from the program
 		"""
 		def get_data(name):
 			args_ser = self.get_arguments_ser(name)
@@ -243,7 +241,7 @@ class VgpProgram(object):
 
 	def __setitem__(self, names, raw_data):
 		"""
-		Description
+		This method set the selected according to raw_data
 		"""
 		def set_data(name):
 			args_ser = self.get_arguments_ser(name) # get a DataFrame containing table and address correspondent to the name
@@ -294,7 +292,8 @@ class VgpProgram(object):
 	# @classmethod
 	# def scale_tool(cls, self, diam, low_path, up_path):
 	# 	"""
-	# 	Description
+	# 	This method scales the specified input values (only the val field) performing
+	#	the linear interpolation between the programs at low_path and up_path
 	# 	"""
 	# 	def scale(diam, low_diam, low_ser, up_diam, up_ser):
 	# 		"""

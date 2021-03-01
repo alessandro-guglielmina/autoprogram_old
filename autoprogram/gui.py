@@ -298,7 +298,7 @@ class InputDataPage(Page):
 	def next_method(self):
 		# Acquire input data
 		if hp.mode == "create_manual":
-			raw_inp_data = hp.config_data.get_gui_raw_data(self)
+			hp.raw_inp_data = hp.config_data.get_gui_raw_data(self)
 		else:
 			raise ValueError("Mode not supported yet")
 		# Save input data inside config_data.input_df
@@ -328,8 +328,8 @@ class CreateProgramPage(Page):
 		res_prog = hp.get_res_prog()
 
 		with res_prog:
-			# 1) Input values update
-			hp.set_input_data(res_prog)
+			# 1) update values update
+			hp.config_data.update_input_data(res_prog)
 			# 2) Value scaling
 			res_prog.scale_tool(hp.config_data.diam_name)
 			# 3) Relationships update
