@@ -9,6 +9,7 @@ from pathlib import Path
 from autoprogram import common
 from autoprogram import helper as hp
 from autoprogram import settingsparser as sp
+from autoprogram import configdataparse as cdp
 
 DEFAULT_MODE = "create_manual"
 
@@ -128,8 +129,8 @@ class App(tk.Tk):
 		Description
 		"""
 		page = self.pages[page_name]
-		page.page_setup(*args, **kwargs)
 		page.tkraise()
+		page.page_setup(*args, **kwargs)
 
 
 class SettingsWindow(tk.Toplevel):
@@ -228,10 +229,12 @@ class InitializationPage(Page):
 		SelectModePage setup for the root and the frame
 		"""
 		def constant_page_setup():
-			# Constant frame setup
-			# The selected directory can be either the family directory
-			# (create manual mode) or the directory containing the files
-			# we want to change (update mode)
+			"""
+			Constant frame setup
+			The selected directory can be either the family directory
+			(create manual mode) or the directory containing the files
+			we want to change (update mode)
+			"""
 			browse_label = tk.Label(self, text="Select Directory: ", width=16)
 			browse_label.grid(row=0, column=0, padx=4, pady=4)
 			self.browse_entry = tk.Entry(self, width=34)
@@ -276,7 +279,7 @@ class InitializationPage(Page):
 
 class InputDataPage(Page):
 	"""
-	Description
+	This page allow the user to enter input data
 	"""
 	def __init__(self, container_frame, root):
 		super().__init__(container_frame, root)
@@ -287,7 +290,7 @@ class InputDataPage(Page):
 		"""
 		# Configuration file initialization
 		try:
-			hp.config_data = hp.ConfigData(hp.fam_dir_path)
+			hp.config_data = cdp.ConfigData(hp.fam_dir_path)
 		except TypeError:
 			raise ValueError("Select a folder")
 		hp.grid_gui_data_entries(self)
@@ -302,7 +305,7 @@ class InputDataPage(Page):
 		else:
 			raise ValueError("Mode not supported yet")
 		# Save input data inside config_data.input_df
-		hp.config_data.save_input_data(raw_inp_data)
+		hp.config_data.save_input_data(hp.raw_inp_data)
 		self.root.show_page(CreateProgramPage)
 
 	@try_decorator
@@ -322,22 +325,34 @@ class CreateProgramPage(Page):
 		"""
 		Description
 		"""
+		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
+		next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
+		progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode='determinate')
+		progress_bar.grid(row=1, column=2, padx=4, pady=4)
 		# Set diameter value
-		hp.set_diam_val()
+		hp.config_data.set_diam_val()
 		# Select the master program and copy it to the result directory
 		res_prog = hp.get_res_prog()
 
 		with res_prog:
-			# 1) update values update
+			# 1) Value scaling
+			res_prog.scale_tool(hp.config_data.diam_name, hp.config_data.diam_val)
+			progress_bar['value']=20
+			# 2) update values update
 			hp.config_data.update_input_data(res_prog)
-			# 2) Value scaling
-			res_prog.scale_tool(hp.config_data.diam_name)
+			progress_bar['value']=40
 			# 3) Relationships update
-			
+			hp.config_data.update_relationships_data(res_prog)
+			progress_bar['value']=70
 			# 4) Function values update
+			hp.config_data.update_function_data(res_prog)
+			progress_bar['value']=100
+
+		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
+		next_method=self.next_method, next_state=tk.NORMAL)
 
 	@try_decorator
-	def next_method(self, val_entries):
+	def next_method(self):
 		pass
 
 	@try_decorator

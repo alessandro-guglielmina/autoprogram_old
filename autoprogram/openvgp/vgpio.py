@@ -278,16 +278,15 @@ class VgpProgram(object):
 		# Setting data
 		names.apply(set_data)
 
-	def scale_tool(self, scale_val_names):
+	def scale_tool(self, scale_val_names, current_diam):
 		"""
 		This method scales the specified input values (only the val field), by applying the ratio between the initial
 		diameter and the current diameter
 		"""
-		current_diam = self[self.diam_name].val.iloc[0] # diameter name returns 2 values (it's a Parameter)
+		# current_diam = self[self.diam_name].val.iloc[0] # diameter name returns 2 values (it's a Parameter)
 		scaled_vals = self[scale_val_names] # copy of initial values
 		scaled_vals.val = (scaled_vals.val / self.initial_diam * current_diam).round(DIGITS_NUM) # scale only the val field, taking 4 decimal digits
 		self[scale_val_names] = scaled_vals # set the scaled values
-		
 
 	# @classmethod
 	# def scale_tool(cls, self, diam, low_path, up_path):

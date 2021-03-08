@@ -12,13 +12,6 @@ class ConfigData(cdp.ConfigData):
 	def __init__(self, fam_dir_path):
 		super().__init__(fam_dir_path)
 
-def set_diam_val():
-	"""
-	Description
-	"""
-	filt = config_data.input_df.data_name == config_data.diam_name
-	config_data.diam_val = float(config_data.input_df.loc[filt, "inp_val"].values[0])
-
 def get_res_prog():
 	"""
 	Description

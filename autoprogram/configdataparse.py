@@ -15,7 +15,7 @@ REL_DATA_SH_NAME = "relationships"
 FUNCT_DATA_1_SH_NAME = "function data 1"
 FUNCT_DATA_2_SH_NAME = "function data 2"
 SCALE_VALS_SH_NAME = "scaled values"
-SHEET_NAMES_1 = [SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
+SHEET_NAMES_1 = [DIAM_NAME_SH_NAME, MASTER_SELECT_SH_NAME, SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
 FUNCT_DATA_SH_NAMES = [FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME] # read all the rows but the first 3
 # ALL_SHEET_NAMES = SHEET_NAMES_1 + SHEET_NAMES_2
 VGP_DATA_SEP = ","
@@ -41,8 +41,15 @@ class ConfigData(object):
 	def __init__(self, fam_dir_path):
 		self.path = Path(fam_dir_path).joinpath(CONFIG_FILE_FILENAME)
 		config_data_1 = pd.read_excel(self.path, sheet_name=SHEET_NAMES_1)
-		config_data_funct = pd.read_excel(self.path, sheet_name=FUNCT_DATA_SH_NAMES, skiprows=[0, 1]) # the first two rows are skipped in function values sheets
-		self.config_data_df = {**config_data_1, **config_data_funct}
+		config_data_funct_1 = pd.read_excel(self.path, sheet_name=[FUNCT_DATA_1_SH_NAME], skiprows=[0, 1]) # the first two rows are skipped in function values sheets
+		# try to read two function data sheets, if only one is present, it initialize different variables
+		try:
+			config_data_funct_2 = pd.read_excel(self.path, sheet_name=[FUNCT_DATA_2_SH_NAME], skiprows=[0, 1]) # the first two rows are skipped in function values sheets
+			self.config_data_df = {**config_data_1, **config_data_funct_1, **config_data_funct_2}
+			self.funct_data_sh_names = [FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME]
+		except KeyError:
+			self.config_data_df = {**config_data_1, **config_data_funct_1}
+			self.funct_data_sh_names = [FUNCT_DATA_1_SH_NAME]
 		self.input_df = self.config_data_df[INPUT_DATA_SH_NAME].astype(str)
 		self._diam_name = None
 		self._scale_val_names_list = None
@@ -79,7 +86,7 @@ class ConfigData(object):
 		try:
 			return master_prog_select_df.loc[filt, "master_prog_name"].iloc[0] + common.vgp_suffix
 		except IndexError:
-			raise ValueError("No master program for such a diameter")
+			raise ValueError(f"No master program defined for such a diameter: {diam_val}")
 
 	def get_gui_raw_data(self, input_data_page):
 		"""
@@ -103,6 +110,13 @@ class ConfigData(object):
 		except KeyError:
 			self.input_df["inp_sect_perc"] = np.nan
 
+	def set_diam_val(self):
+		"""
+		This method set the variable self.diam_val to the diameter value inserted by the user
+		"""
+		filt = self.input_df.data_name == self.diam_name
+		self.diam_val = float(self.input_df.loc[filt, "inp_val"].values[0])
+
 	def update_input_data(self, res_prog):
 		"""
 		This method updates the input data coming from the previously saved DataFrame (self.input_df) in the program
@@ -114,6 +128,19 @@ class ConfigData(object):
 		inp_data_names = inp_data_names[inp_data_names_filt]
 		inp_data = self.input_df.loc[inp_data_names_filt, ["inp_val", "inp_sect_perc"]]
 		res_prog[inp_data_names] = inp_data
+
+	@staticmethod
+	def var_from_python(python_expr, var_name):
+		"""
+		This method perform a variable assignment from python code
+		"""
+		try:
+			local_dict = {}
+			exec(python_expr, globals(), local_dict)
+			var = local_dict[var_name]
+			return var
+		except SyntaxError:
+			raise ValueError('Wrong syntax in the configuration values.')
 
 	def update_relationships_data(self, res_prog):
 		"""
@@ -139,30 +166,42 @@ class ConfigData(object):
 
 		# get a DataFrame whose rows are relations, each one containing the data name and the relationship
 		rel_df = self.config_data_df[REL_DATA_SH_NAME].astype(str)
-		for rel_idx, (data_name, rel_expr) in rel_df.iterrows():
-			arg_data_names = re.findall(r'\$(.*?)\$', rel_expr) # get a list with all the data names in the expression
+		for rel_idx, (data_name, raw_rel_expr) in rel_df.iterrows():
+			arg_data_names = re.findall(r'\$(.*?)\$', raw_rel_expr) # get a list with all the data names in the expression
 			sub_data_df = pd.DataFrame(arg_data_names, columns=["arg_data_name"])
 			sub_data_df[["arg_scalar_val"]] = sub_data_df.apply(get_rel_scalar_val, axis=1) # get values from the program and convert to scalar (in order to apply relations)
 			for idx, (arg_data_name, arg_scalar_val) in sub_data_df.iterrows():
-				rel_expr = re.sub(r'\${}\$'.format(arg_data_name), str(arg_scalar_val), rel_expr)
-			rel_expr = "raw_rel_val = [(" + rel_expr + ")]" # the relation value is assigned to the variable "raw_rel_val"
+				raw_rel_expr = re.sub(r'\${}\$'.format(arg_data_name), str(arg_scalar_val), raw_rel_expr)
+			rel_expr = "rel_val = [(" + raw_rel_expr + ")]" # the relation value is assigned to the variable "raw_rel_val"
 			# execute raw_rel_val assignment
-			try:
-				local_dict = {}
-				exec(rel_expr, globals(), local_dict)
-				raw_rel_val = local_dict["raw_rel_val"]
-			except SyntaxError:
-				raise ValueError('Wrong syntax in the configuration values.')
+			rel_val = ConfigData.var_from_python(rel_expr, "rel_val")
 			# update vgp data in the program (raw data are automatically converted to vgp data)
-			res_prog[data_name] = raw_rel_val
+			res_prog[data_name] = rel_val
 
 	def update_function_data(self, res_prog):
 		"""
-		Description
+		This method read data in the function data sheets and update them into the program
 		"""
-		for funct_data_sh_name in FUNCT_DATA_SH_NAMES:
+		for funct_data_sh_name in self.funct_data_sh_names:
 			funct_data_df = self.config_data_df[funct_data_sh_name].astype(str)
-			funct_data_df.iloc[:, [0, 1]] = funct_data_sh.iloc[:, [0, 1]].astype(float) # the first two columns are casted as float
+			funct_data_df.iloc[:, [0, 1]] = funct_data_df.iloc[:, [0, 1]].astype(float) # the first two columns are casted as float
+			arg_name = funct_data_df.columns[0] # argument name is the first column heading
+			arg_val = res_prog[arg_name].val.iloc[0] # select the val and the first element only (in case of Parameter and VGP_Value_FunctionD data)
+			filt = (funct_data_df.iloc[:, 0] <= arg_val) & (funct_data_df.iloc[:, 1] >= arg_val) # filtering based on the argument value
+			# If the filter doesn't correspond to any row, it means that no function data correspond to that argument value
+			if (~filt).all():
+				raise ValueError(f"No function data defined for {arg_name} equal to {arg_val}")
+			select_funct_data_df = funct_data_df.loc[filt, :]
+			select_funct_data_df = select_funct_data_df.iloc[:, 2::] # the first two column are the arguments column and are not considered during data reading and updating in the program
+			# iterations over columns (rows already match the argument value)
+			for data_name in select_funct_data_df: # data_name = column heading
+				if not ('UNNAMED' in data_name.upper()): # if the column name is empty, it's a comment and must not be compiled
+					funct_raw_expr = select_funct_data_df.at[0, data_name]
+					funct_data_expr = "funct_data = [(" + funct_raw_expr + ")]" # the function value is assigned to the variable "raw_funct_data" when this code is compiled
+					# execute raw_funct_data assignment
+					funct_data = ConfigData.var_from_python(funct_data_expr, "funct_data")
+					# update vgp data in the program (raw data are automatically converted to vgp data)
+					res_prog[data_name] = funct_data
 
 	# def get_config_df(self):
 	# 	config_df = {}
