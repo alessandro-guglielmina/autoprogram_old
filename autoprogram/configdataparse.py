@@ -15,8 +15,8 @@ REL_DATA_SH_NAME = "relationships"
 FUNCT_DATA_1_SH_NAME = "function data 1"
 FUNCT_DATA_2_SH_NAME = "function data 2"
 SCALE_VALS_SH_NAME = "scaled values"
-# SHEET_NAMES_1 = (SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME)
-FUNCT_DATA_SH_NAMES = (FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME) # read all the rows but the first 3
+SHEET_NAMES_1 = [SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
+FUNCT_DATA_SH_NAMES = [FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME] # read all the rows but the first 3
 # ALL_SHEET_NAMES = SHEET_NAMES_1 + SHEET_NAMES_2
 VGP_DATA_SEP = ","
 VAL_FUND_SEP = "-"
@@ -40,7 +40,9 @@ class ConfigData(object):
 	"""
 	def __init__(self, fam_dir_path):
 		self.path = Path(fam_dir_path).joinpath(CONFIG_FILE_FILENAME)
-		self.config_data_df = pd.read_excel(self.path, sheet_name=None)
+		config_data_1 = pd.read_excel(self.path, sheet_name=SHEET_NAMES_1)
+		config_data_funct = pd.read_excel(self.path, sheet_name=FUNCT_DATA_SH_NAMES, skiprows=[0, 1]) # the first two rows are skipped in function values sheets
+		self.config_data_df = {**config_data_1, **config_data_funct}
 		self.input_df = self.config_data_df[INPUT_DATA_SH_NAME].astype(str)
 		self._diam_name = None
 		self._scale_val_names_list = None
@@ -138,30 +140,29 @@ class ConfigData(object):
 		# get a DataFrame whose rows are relations, each one containing the data name and the relationship
 		rel_df = self.config_data_df[REL_DATA_SH_NAME].astype(str)
 		for rel_idx, (data_name, rel_expr) in rel_df.iterrows():
-			if AUX_STR not in data_name.upper(): # if it's not an auxiliary data
-				arg_data_names = re.findall(r'\$(.*?)\$', rel_expr) # get a list with all the data names in the expression
-				sub_data_df = pd.DataFrame(arg_data_names, columns=["arg_data_name"])
-				sub_data_df[["arg_scalar_val"]] = sub_data_df.apply(get_rel_scalar_val, axis=1) # get values from the program and convert to scalar (in order to apply relations)
-				for idx, (arg_data_name, arg_scalar_val) in sub_data_df.iterrows():
-					rel_expr = re.sub(r'\${}\$'.format(arg_data_name), str(arg_scalar_val), rel_expr)
-				rel_expr = "raw_rel_val = [(" + rel_expr + ")]" # the relation value is assigned to the variable "raw_rel_val"
-				# execute raw_rel_val assignment
-				try:
-					local_dict = {}
-					exec(rel_expr, globals(), local_dict)
-					raw_rel_val = local_dict["raw_rel_val"]
-				except SyntaxError:
-					raise ValueError('Wrong syntax in the configuration values.')
-				# update vgp data in the program (raw data are automatically converted to vgp data)
-				res_prog[data_name] = raw_rel_val
+			arg_data_names = re.findall(r'\$(.*?)\$', rel_expr) # get a list with all the data names in the expression
+			sub_data_df = pd.DataFrame(arg_data_names, columns=["arg_data_name"])
+			sub_data_df[["arg_scalar_val"]] = sub_data_df.apply(get_rel_scalar_val, axis=1) # get values from the program and convert to scalar (in order to apply relations)
+			for idx, (arg_data_name, arg_scalar_val) in sub_data_df.iterrows():
+				rel_expr = re.sub(r'\${}\$'.format(arg_data_name), str(arg_scalar_val), rel_expr)
+			rel_expr = "raw_rel_val = [(" + rel_expr + ")]" # the relation value is assigned to the variable "raw_rel_val"
+			# execute raw_rel_val assignment
+			try:
+				local_dict = {}
+				exec(rel_expr, globals(), local_dict)
+				raw_rel_val = local_dict["raw_rel_val"]
+			except SyntaxError:
+				raise ValueError('Wrong syntax in the configuration values.')
+			# update vgp data in the program (raw data are automatically converted to vgp data)
+			res_prog[data_name] = raw_rel_val
 
 	def update_function_data(self, res_prog):
 		"""
 		Description
 		"""
 		for funct_data_sh_name in FUNCT_DATA_SH_NAMES:
-				funct_data_sh = self.config_data_df[funct_data_sh_name].astype(str)
-				funct_data_sh.iloc[:, [0, 1]] = pd.to_numeric(funct_data_sh[:, [0, 1]])
+			funct_data_df = self.config_data_df[funct_data_sh_name].astype(str)
+			funct_data_df.iloc[:, [0, 1]] = funct_data_sh.iloc[:, [0, 1]].astype(float) # the first two columns are casted as float
 
 	# def get_config_df(self):
 	# 	config_df = {}
