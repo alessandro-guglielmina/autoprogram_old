@@ -1,40 +1,231 @@
 import tkinter as tk
 import shutil
+import threading
+import os
+from pathlib import Path
+from tkinter import filedialog
 
 from autoprogram import configdataparse as cdp
 from autoprogram.openvgp import vgpio
 from autoprogram import common
 
-fam_dir_path = None
+# fam_dir_path = None
+# res_prog_name = None
 # config_data = None
 
-class ConfigData(cdp.ConfigData):
-	def __init__(self, fam_dir_path):
-		super().__init__(fam_dir_path)
+def try_decorator(target_method):
+	"""
+	This decorator is added to any confirm function, in order to print the error (if any) on the communication label
+	"""
+	def wrapper_function(*args, **kwargs):
+		try:
+			args[0].root.comm_label_write("")
+			return target_method(*args, **kwargs)
+		except ValueError as ve:
+			args[0].root.comm_label_write(ve) # args[0] is self, i.e. the frame object (the page)
+	return wrapper_function
 
-def get_res_prog():
-	"""
-	Description
-	"""
-	master_prog_name = config_data.get_master_prog_name(config_data.diam_val)
-	master_prog_path = fam_dir_path.joinpath(master_prog_name)
-	res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
-	try:
-		shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
-	except FileNotFoundError as fnfe:
-		raise ValueError(f"No such result directory: {common.res_progs_dir}")
-	res_prog = vgpio.VgpProgram(res_prog_path, config_data.diam_name)
-	return res_prog
+# @try_decorator
+# def decorated_askdirectory(initialization_page_frame, initialdir):
+# 	"""
+# 	Description
+# 	"""
+# 	if not os.path.isdir(initialdir):
+# 		raise ValueError("Specified master program directory doesn't exist")
+# 	global fam_dir_path
+# 	fam_dir_path = Path(filedialog.askdirectory(initialdir=initialdir))
+# 	self.browse_entry.insert(0, fam_dir_path.as_posix())
 
-def grid_gui_data_entries(input_data_page):
+# class SelectModePage(object):
+# 	@staticmethod
+# 	def page_setup(self):
+# 		# Constant root setup
+# 		# The root must be set up after the "mode" variable has been created (called in self.next_method())
+# 		# Constant frame setup
+# 		inp_mode = tk.StringVar()
+# 		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual")
+# 		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update")
+# 		create_manual_rb.grid(row=0, column=0, padx=10, pady=4)
+# 		update_rb.grid(row=1, column=0, padx=10, pady=4)
+# 		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[inp_mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
+
+# 	@staticmethod
+# 	# @try_decorator
+# 	def next_method(self, inp_mode, InitializationPage):
+# 		global mode
+# 		mode = inp_mode.get()
+# 		self.root.show_page(InitializationPage)
+
+class InitializationPage(object):
+	@staticmethod
+	def constant_page_setup(initialization_page_frame):
+		"""
+		Constant frame setup
+		The selected directory can be either the family directory
+		(create manual mode) or the directory containing the files
+		we want to change (update mode)
+		"""
+		browse_label = tk.Label(initialization_page_frame, text="Select Directory: ", width=16)
+		browse_label.grid(row=0, column=0, padx=4, pady=4)
+		initialization_page_frame.browse_entry = tk.Entry(initialization_page_frame, width=34)
+		initialization_page_frame.browse_entry.grid(row=0, column=1, padx=4, pady=4)
+		initialization_page_frame.browse_butt = tk.Button(initialization_page_frame, text="Browse", width=10)
+		initialization_page_frame.browse_butt.grid(row=0, column=2, padx=4, pady=4)
+
+	@try_decorator
+	def decorated_askdirectory(initialization_page_frame, initialdir):
+		"""
+		Description
+		"""
+		if not os.path.isdir(initialdir):
+			raise ValueError("Specified master program directory doesn't exist")
+		global fam_dir_path
+		fam_dir_path = Path(filedialog.askdirectory(initialdir=initialdir))
+		initialization_page_frame.browse_entry.insert(0, fam_dir_path.as_posix())
+
+	# @staticmethod
+	# def page_setup(self):
+	# 	"""
+	# 	SelectModePage setup for the root and the frame
+	# 	"""
+	# 	if mode == "create_manual":
+	# 		InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
+	# 		tool_name_label = tk.Label(self, text="Tool Name: ")
+	# 		tool_name_label.grid(row=1, column=0, padx=4, pady=4)
+	# 		self.tool_name_entry = tk.Entry(self, width=34)
+	# 		self.tool_name_entry.grid(row=1, column=1, padx=4, pady=4)
+	# 		self.browse_butt.config(command=lambda: threading.Thread(target=decorated_askdirectory(self, common.master_progs_dir)).start())
+	# 		# Constant root setup (independent from the selected mode)
+	# 		self.root.root_setup(head_text="Initialization Page", back_method=self.back_method,\
+	# 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
+	# 	else:
+	# 		raise ValueError("Mode not supported yet")
+
+	# @staticmethod
+	# #@try_decorator
+	# def next_method(self, InputDataPage):
+	# 	self.root.show_page(InputDataPage)
+	# 	global res_prog_name
+	# 	res_prog_name = self.tool_name_entry.get()
+
+	# @staticmethod
+	# #@try_decorator
+	# def back_method(self, SelectModePage):
+	# 	global mode
+	# 	mode = None
+	# 	self.root.show_page(SelectModePage)
+
+class InputDataPage(object):
+	# @staticmethod
+	# def page_setup(self):
+	# 	"""
+	# 	Description
+	# 	"""
+	# 	try:
+	# 		global config_data
+	# 		config_data = cdp.ConfigData(fam_dir_path)
+	# 	except TypeError:
+	# 		raise ValueError("Select a folder")
+	# 	InputDataPage.grid_gui_data_entries(self)
+	# 	self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
+	# 	next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
+
+	@staticmethod
+	def grid_gui_data_entries(input_data_page):
+		"""
+		Description
+		"""
+		for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.input_df.data_name, config_data.input_df.data_descr)):
+			inp_data_entry = tk.Entry(input_data_page, width=20, name=cdp.ConfigData.to_widget_name(inp_data_name))
+			inp_data_label = tk.Label(input_data_page, width=20, text=inp_data_descr)
+			inp_data_entry.grid(row=i, column=1, padx=4, pady=4)
+			inp_data_label.grid(row=i, column=0, padx=4, pady=4)
+
+	# @staticmethod
+	# #@try_decorator
+	# def next_method(self, CreateProgramPage):
+	# 	# Acquire input data
+	# 	if mode == "create_manual":
+	# 		global raw_inp_data
+	# 		raw_inp_data = config_data.get_gui_raw_data(self)
+	# 		# Save input data inside config_data.input_df
+	# 		config_data.save_input_data(raw_inp_data)
+	# 		self.root.show_page(CreateProgramPage)
+	# 	else:
+	# 		raise ValueError("Mode not supported yet")
+
+	# @staticmethod
+	# #@try_decorator
+	# def back_method(self, InitializationPage):
+	# 	global fam_dir_path
+	# 	fam_dir_path = None
+	# 	self.root.show_page(InitializationPage)
+
+class CreateProgramPage(object):
 	"""
-	Description
-	"""
-	for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.input_df.data_name, config_data.input_df.data_descr)):
-		inp_data_entry = tk.Entry(input_data_page, width=20, name=ConfigData.to_widget_name(inp_data_name))
-		inp_data_label = tk.Label(input_data_page, width=20, text=inp_data_descr)
-		inp_data_entry.grid(row=i, column=1, padx=4, pady=4)
-		inp_data_label.grid(row=i, column=0, padx=4, pady=4)
+		In this page the program is updated with data from the user and from the tables
+		"""
+	@staticmethod
+	def get_res_prog():
+		"""
+		This method select the master program based on the excel sheet
+		"""
+		master_prog_name = config_data.get_master_prog_name(config_data.diam_val)
+		master_prog_path = fam_dir_path.joinpath(master_prog_name)
+		res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
+		try:
+			shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
+		except FileNotFoundError as fnfe:
+			raise ValueError(f"No such result directory: {common.res_progs_dir}")
+		res_prog = vgpio.VgpProgram(res_prog_path, config_data.diam_name)
+		return res_prog
+
+	# @staticmethod
+	# def page_setup(self):
+		# """
+		# Description
+		# """
+		# self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
+		# next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
+		# progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode='determinate')
+		# progress_bar.grid(row=1, column=2, padx=40, pady=40)
+		# prog_created_label = tk.Label(self, width=20, text="Program created!")
+		# prog_created_label.grid(row=2, column=2, padx=40, pady=40)
+		# # Set diameter value
+		# config_data.set_diam_val()
+		# # Select the master program and copy it to the result directory
+		# res_prog = CreateProgramPage.get_res_prog()
+
+		# with res_prog:
+		# 	# 1) Value scaling
+		# 	res_prog.scale_tool(hp.config_data.diam_name, hp.config_data.diam_val)
+		# 	progress_bar['value']=20
+		# 	# 2) update values update
+		# 	hp.config_data.update_input_data(res_prog)
+		# 	progress_bar['value']=40
+		# 	# 3) Relationships update
+		# 	hp.config_data.update_relationships_data(res_prog)
+		# 	progress_bar['value']=70
+		# 	# 4) Function values update
+		# 	hp.config_data.update_function_data(res_prog)
+		# 	progress_bar['value']=100
+
+		# self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
+		# next_method=self.next_method, next_state=tk.NORMAL)
+
+	# @staticmethod
+	# #@try_decorator
+	# def next_method(self, SelectModePage):
+	# 	self.root.show_page(CreateProgramPage)
+
+	# @staticmethod
+	# #@try_decorator
+	# def back_method(self, InputDataPage):
+	# 	global raw_inp_data
+	# 	raw_inp_data = None
+	# 	self.root.show_page(InputDataPage)
+
+##########################################################################################à
 
 # # from pathlib import Path
 # # import glob

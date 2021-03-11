@@ -172,7 +172,7 @@ class ConfigData(object):
 			sub_data_df[["arg_scalar_val"]] = sub_data_df.apply(get_rel_scalar_val, axis=1) # get values from the program and convert to scalar (in order to apply relations)
 			for idx, (arg_data_name, arg_scalar_val) in sub_data_df.iterrows():
 				raw_rel_expr = re.sub(r'\${}\$'.format(arg_data_name), str(arg_scalar_val), raw_rel_expr)
-			rel_expr = "rel_val = [(" + raw_rel_expr + ")]" # the relation value is assigned to the variable "raw_rel_val"
+			rel_expr = "rel_val = [[" + raw_rel_expr + "]]" # the relation value is assigned to the variable "raw_rel_val"
 			# execute raw_rel_val assignment
 			rel_val = ConfigData.var_from_python(rel_expr, "rel_val")
 			# update vgp data in the program (raw data are automatically converted to vgp data)
@@ -197,9 +197,15 @@ class ConfigData(object):
 			for data_name in select_funct_data_df: # data_name = column heading
 				if not ('UNNAMED' in data_name.upper()): # if the column name is empty, it's a comment and must not be compiled
 					funct_raw_expr = select_funct_data_df.at[0, data_name]
-					funct_data_expr = "funct_data = [(" + funct_raw_expr + ")]" # the function value is assigned to the variable "raw_funct_data" when this code is compiled
+					funct_data_expr = "funct_data = [[" + funct_raw_expr + "]]" # the function value is assigned to the variable "raw_funct_data" when this code is compiled
 					# execute raw_funct_data assignment
 					funct_data = ConfigData.var_from_python(funct_data_expr, "funct_data")
+					# convert m/s to mm/s
+					if "SPEED" in data_name.upper():
+						funct_data[0][0] = pd.Series(funct_data[0][0])*1000
+					# convert mm/min to mm/s
+					elif "FEEDRATE" in data_name.upper():
+						funct_data[0][0] = pd.Series(funct_data[0][0])/60
 					# update vgp data in the program (raw data are automatically converted to vgp data)
 					res_prog[data_name] = funct_data
 

@@ -66,7 +66,7 @@ class VgpData(pd.DataFrame):
 		"""
 		This method convert raw data in a certain format (specified below) to vgp data and pack them in a single DataFrame
 		"""
-		# list type raw data are in the form [(val1, np.nan), ([val21-val22], [sect_perc21-sect_perc22]), ...]
+		# list type raw data are in the form [[val1, np.nan], [[val21-val22], [sect_perc21-sect_perc22]], ...]
 		if isinstance(raw_data, list):
 			vgp_data_list = []
 			for name, raw_data_i in zip(names, raw_data):

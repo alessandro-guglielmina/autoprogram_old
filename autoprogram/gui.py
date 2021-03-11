@@ -1,30 +1,31 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
-from tkinter import filedialog
-import threading
-import os
-from pathlib import Path
+from tkinter import filedialog # delete
+import threading # delete
+import os # delete
+from pathlib import Path # delete
 
 from autoprogram import common
 from autoprogram import helper as hp
 from autoprogram import settingsparser as sp
 from autoprogram import configdataparse as cdp
+# from autoprogram.helper import try_decorator
 
 DEFAULT_MODE = "create_manual"
 
 
-def try_decorator(target_method):
-	"""
-	This decorator is added to any confirm function, in order to print the error (if any) on the communication label
-	"""
-	def wrapper_function(*args, **kwargs):
-		try:
-			args[0].root.comm_label_write("")
-			return target_method(*args, **kwargs)
-		except ValueError as ve:
-			args[0].root.comm_label_write(ve) # args[0] is self, i.e. the frame object (the page)
-	return wrapper_function
+# def# try_decorator(target_method):
+# 	"""
+# 	This decorator is added to any confirm function, in order to print the error (if any) on the communication label
+# 	"""
+# 	def wrapper_function(*args, **kwargs):
+# 		try:
+# 			args[0].root.comm_label_write("")
+# 			return target_method(*args, **kwargs)
+# 		except ValueError as ve:
+# 			args[0].root.comm_label_write(ve) # args[0] is self, i.e. the frame object (the page)
+# 	return wrapper_function
 
 # def reset_comm_label(next_method):
 # 	"""
@@ -82,7 +83,7 @@ class App(tk.Tk):
 		"""
 		settings_window = SettingsWindow(self) # instantiate another window, passing the root (self) as argument
 
-	#@try_decorator
+	##@try_decorator
 	def instantiate_page_frames(self):
 		"""
 		This method instantiates all the page frames without choice-dependent customization
@@ -128,9 +129,14 @@ class App(tk.Tk):
 		"""
 		Description
 		"""
-		page = self.pages[page_name]
-		page.tkraise()
-		page.page_setup(*args, **kwargs)
+		try:
+			self.comm_label_write("")
+			page = self.pages[page_name]
+			page.page_setup(*args, **kwargs)
+			page.tkraise()
+			page.run(*args, **kwargs)
+		except ValueError as ve:
+			self.comm_label_write(ve)
 
 
 class SettingsWindow(tk.Toplevel):
@@ -176,9 +182,9 @@ class Page(tk.Frame):
 		self.root = root
 
 	def page_setup(self, *args, **kwargs):
-		"""
-		Description
-		"""
+		pass
+
+	def run(self, *args, **kwargs):
 		pass
 
 	def back_method(self):
@@ -196,83 +202,56 @@ class SelectModePage(Page):
 		super().__init__(container_frame, root)
 
 	def page_setup(self):
-		# Constant root setup
-		# The root must be set up after the "mode" variable has been created (called in self.next_method())
-		# Constant frame setup
-		mode = tk.StringVar()
-		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=mode, value="create_manual")
-		update_rb = tk.Radiobutton(self, text="Update", variable=mode, value="update")
+		"""
+		Create and grid the SelectModePage widgets and eventually set the root (title, buttonl, labels...)
+		"""
+		inp_mode = tk.StringVar()
+		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual")
+		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update")
 		create_manual_rb.grid(row=0, column=0, padx=10, pady=4)
 		update_rb.grid(row=1, column=0, padx=10, pady=4)
-		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
+		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[inp_mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
 
-	@try_decorator
-	def next_method(self, mode):
-		"""
-		Description
-		"""
-		# Get selected mode
-		hp.mode = mode.get()
+	#@try_decorator
+	def next_method(self, inp_mode):
+		# Set the global variable hp.mode
+		hp.mode = inp_mode.get()
 		self.root.show_page(InitializationPage)
 
 
 class InitializationPage(Page):
 	"""
-	Description
+	In this page the user set the tool name and reference family
 	"""
-
 	def __init__(self, container_frame, root):
 		super().__init__(container_frame, root)
 
 	def page_setup(self):
 		"""
-		SelectModePage setup for the root and the frame
+		Create and grid the InitializationPage widgets and eventually set the root (title, buttonl, labels...)
 		"""
-		def constant_page_setup():
-			"""
-			Constant frame setup
-			The selected directory can be either the family directory
-			(create manual mode) or the directory containing the files
-			we want to change (update mode)
-			"""
-			browse_label = tk.Label(self, text="Select Directory: ", width=16)
-			browse_label.grid(row=0, column=0, padx=4, pady=4)
-			self.browse_entry = tk.Entry(self, width=34)
-			self.browse_entry.grid(row=0, column=1, padx=4, pady=4)
-			self.browse_butt = tk.Button(self, text="Browse", width=10)
-			self.browse_butt.grid(row=0, column=2, padx=4, pady=4)
-
-		@try_decorator
-		def decorated_askdirectory(self, initialdir):
-			"""
-			Description
-			"""
-			if not os.path.isdir(initialdir):
-				raise ValueError("Specified master program directory doesn't exist")
-			hp.fam_dir_path = Path(filedialog.askdirectory(initialdir=initialdir))
-			self.browse_entry.insert(0, hp.fam_dir_path.as_posix())
-
-		# Variable frame setup
 		if hp.mode == "create_manual":
-			constant_page_setup() # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
+			hp.InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
 			tool_name_label = tk.Label(self, text="Tool Name: ")
 			tool_name_label.grid(row=1, column=0, padx=4, pady=4)
 			self.tool_name_entry = tk.Entry(self, width=34)
 			self.tool_name_entry.grid(row=1, column=1, padx=4, pady=4)
-			self.browse_butt.config(command=lambda: threading.Thread(target=decorated_askdirectory(self, common.master_progs_dir)).start())
+			self.browse_butt.config(command=lambda: threading.Thread(target=hp.InitializationPage.decorated_askdirectory(self, common.master_progs_dir)).start())
 			# Constant root setup (independent from the selected mode)
 			self.root.root_setup(head_text="Initialization Page", back_method=self.back_method,\
 			next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 		else:
 			raise ValueError("Mode not supported yet")
 
-	@try_decorator
+	#@try_decorator
 	def next_method(self):
 		self.root.show_page(InputDataPage)
+		# Set the global variable hp.res_prog_name
 		hp.res_prog_name = self.tool_name_entry.get()
 
-	@try_decorator
+	#@try_decorator
 	def back_method(self):
+		# Set the global variable hp.mode
 		hp.mode = None
 		self.root.show_page(SelectModePage)
 
@@ -288,28 +267,29 @@ class InputDataPage(Page):
 		"""
 		Description
 		"""
-		# Configuration file initialization
 		try:
+			# Set the global variable hp.config_data
 			hp.config_data = cdp.ConfigData(hp.fam_dir_path)
 		except TypeError:
 			raise ValueError("Select a folder")
-		hp.grid_gui_data_entries(self)
+		hp.InputDataPage.grid_gui_data_entries(self)
 		self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 
-	# @try_decorator
+	#@try_decorator
 	def next_method(self):
-		# Acquire input data
 		if hp.mode == "create_manual":
+			# Set the global variable hp.raw_inp_data
 			hp.raw_inp_data = hp.config_data.get_gui_raw_data(self)
+			# Save input data inside config_data.input_df
+			hp.config_data.save_input_data(hp.raw_inp_data)
+			self.root.show_page(CreateProgramPage)
 		else:
 			raise ValueError("Mode not supported yet")
-		# Save input data inside config_data.input_df
-		hp.config_data.save_input_data(hp.raw_inp_data)
-		self.root.show_page(CreateProgramPage)
 
-	@try_decorator
+	#@try_decorator
 	def back_method(self):
+		# Set the global variable hp.fam_dir_path
 		hp.fam_dir_path = None
 		self.root.show_page(InitializationPage)
 
@@ -327,37 +307,45 @@ class CreateProgramPage(Page):
 		"""
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
-		progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode='determinate')
-		progress_bar.grid(row=1, column=2, padx=4, pady=4)
+		self.progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode='determinate')
+		self.progress_bar.grid(row=1, column=2, padx=40, pady=40)
+
+	def run(self):
+		"""
+		This code runs while the CreateProgramPage is displayed
+		"""
 		# Set diameter value
 		hp.config_data.set_diam_val()
 		# Select the master program and copy it to the result directory
-		res_prog = hp.get_res_prog()
+		res_prog = hp.CreateProgramPage.get_res_prog()
 
 		with res_prog:
 			# 1) Value scaling
 			res_prog.scale_tool(hp.config_data.diam_name, hp.config_data.diam_val)
-			progress_bar['value']=20
+			self.progress_bar['value']=20
 			# 2) update values update
 			hp.config_data.update_input_data(res_prog)
-			progress_bar['value']=40
+			self.progress_bar['value']=40
 			# 3) Relationships update
 			hp.config_data.update_relationships_data(res_prog)
-			progress_bar['value']=70
+			self.progress_bar['value']=70
 			# 4) Function values update
 			hp.config_data.update_function_data(res_prog)
-			progress_bar['value']=100
+			self.progress_bar['value']=100
 
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
-		next_method=self.next_method, next_state=tk.NORMAL)
+		next_method=self.next_method, next_state=tk.NORMAL, back_state=tk.NORMAL)
+		self.root.comm_label_write("Program created!")
 
-	@try_decorator
+	#@try_decorator
 	def next_method(self):
-		pass
+		self.root.show_page(SelectModePage)
 
-	@try_decorator
+	#@try_decorator
 	def back_method(self):
-		pass
+		# Set the global variable hp.fam_dir_path
+		hp.raw_inp_data = None
+		self.root.show_page(InputDataPage)
 
 	# def configure_root_and_next_page(self):
 	# 	"""
@@ -402,7 +390,7 @@ class CreateProgramPage(Page):
 # 	def back_method(self):
 # 		pass
 
-# 	@try_decorator
+# 	#@try_decorator
 # 	def next_method(self):
 # 		"""
 # 			This method is associated to the confirm button, it saves the user inputs into common variables
@@ -447,7 +435,7 @@ class CreateProgramPage(Page):
 # 		self.root.show_frame(InitializeFrame)
 
 
-# 	@try_decorator
+# 	#@try_decorator
 # 	def confirm_function(self):
 
 # 		input_vals = []
@@ -490,7 +478,7 @@ class CreateProgramPage(Page):
 # 		self.root.show_frame(InsertParametersFrame)
 
 
-# 	@try_decorator
+# 	#@try_decorator
 # 	def confirm_function(self):
 
 # 		self.root.show_frame(InitializeFrame)
