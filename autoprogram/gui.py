@@ -327,7 +327,7 @@ class CreateProgramPage(Page):
 
 		with hp.res_prog as res_prog:
 			# 1) Value scaling
-			with hp.low_prog as low_prog, hp.up_prog as up_prog:
+			with hp.low_prog as low_prog, hp.up_prog as up_prog: # indented context manager for the enclosing programs
 				res_prog.scale_tool(hp.diam_val, low_prog, up_prog)
 			self.progress_bar['value']=20
 			# 2) update values update

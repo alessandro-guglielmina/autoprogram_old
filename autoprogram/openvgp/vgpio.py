@@ -1,4 +1,5 @@
 import sqlite3 as sql
+import sqlalchemy as sqla
 import numpy as np
 import pandas as pd
 import math
@@ -111,7 +112,6 @@ class VgpProgram(object):
 		self.df_commit()
 		self.con.commit()
 		self.con.close()
-		pass
 
 	@staticmethod				
 	def elem_wise_query(search_df, id_col, _id, res_col):
@@ -185,9 +185,20 @@ class VgpProgram(object):
 		for table_name, table in RW_TABLES.iterrows():
 			# Reset Parameter values to be string in order to not alter the original .vgp file data types
 			df_temp = self.df[table_name]
+			# Reset original data types
 			if table_name == PARAMETER.name:
-					df_temp[table.val_col] = df_temp[table.val_col].astype("str") # Parameter values are reset to string type
-			df_temp.to_sql(table.name, self.con, if_exists='replace', index=False)
+				dtypes_df = {"PA_Type": "VARCHAR(100)", "PA_Name": "VARCHAR(100)", table.val_col: "VARCHAR(100)",\
+				"PA_Description": "VARCHAR(100)", "PA_AttachedFile": "VARCHAR(100)", "PA_Definition": "VARCHAR(100)",\
+				"PA_Section": "VARCHAR(100)"}
+			elif table_name == VGP_VALUE_DOUBLE.name:
+				dtypes_df = {VGP_VALUE_DOUBLE.val_col: "DOUBLE PRECISION"}
+			elif table_name == VGP_VALUE_FUNCTIOND.name:
+				dtypes_df = {VGP_VALUE_FUNCTIOND.sect_perc_col: "DOUBLE PRECISION", VGP_VALUE_FUNCTIOND.val_col: "DOUBLE PRECISION"}
+			elif table_name == VGP_VALUE_INT.name:
+				dtypes_df = {VGP_VALUE_INT.val_col: "INTEGER"}
+			else:
+				raise ValueError(f"The table {table_name} must not be changed")
+			df_temp.to_sql(table.name, self.con, if_exists="replace", index=False, dtype=dtypes_df)
 		del df_temp, self.df
 
 	def get_addr(self, name):
