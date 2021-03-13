@@ -1,3 +1,4 @@
+import pandas as pd
 import tkinter as tk
 import shutil
 import threading
@@ -165,20 +166,58 @@ class CreateProgramPage(object):
 	"""
 		In this page the program is updated with data from the user and from the tables
 		"""
+	# @staticmethod
+	# def get_res_prog():
+	# 	"""
+	# 	This method select the master program based on the excel sheet
+	# 	"""
+	# 	master_prog_name = config_data.get_master_prog_name(config_data.diam_val)
+	# 	master_prog_path = fam_dir_path.joinpath(master_prog_name)
+	# 	res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
+	# 	try:
+	# 		shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
+	# 	except FileNotFoundError as fnfe:
+	# 		raise ValueError(f"No such result directory: {common.res_progs_dir}")
+	# 	res_prog = vgpio.VgpProgram(res_prog_path, config_data.diam_name)
+	# 	return res_prog
 	@staticmethod
-	def get_res_prog():
+	def set_diam_val():
 		"""
-		This method select the master program based on the excel sheet
+		This method set the variable self.diam_val to the diameter value inserted by the user
 		"""
-		master_prog_name = config_data.get_master_prog_name(config_data.diam_val)
-		master_prog_path = fam_dir_path.joinpath(master_prog_name)
+		filt = config_data.input_df.data_name == config_data.diam_name
+		# Set the global variable diam_val
+		global diam_val
+		diam_val = float(config_data.input_df.loc[filt, "inp_val"].values[0])
+
+	@staticmethod
+	def set_low_up_res_prog_paths():
+		"""
+		This method sets the lower, upper and result program paths as global variables
+		"""
+		def get_diam_val(prog_path):
+			"""
+			This method returns the diameter value of the program path passed as argument
+			"""
+			with vgpio.VgpProgram(prog_path, config_data.diam_name) as prog:
+				return prog.initial_diam
+
+		prog_paths =pd.Series(fam_dir_path.glob('*' + common.vgp_suffix))
+		prog_diam_vals = pd.Series(prog_paths.apply(get_diam_val))
+		fam_progs_df = pd.DataFrame({"path": prog_paths, "diam_val": prog_diam_vals})
+		#enclosing_progs_df = fam_progs_df.iloc[(fam_progs_df["diam_val"] - diam_val).abs().argsort()[:2], :]
+		enclosing_progs_df = fam_progs_df.iloc[fam_progs_df["diam_val"].argsort()[:2], :] # pd.DataFrame containing the two enclosing programs data ordered by ascending diameter
+		low_prog_path = enclosing_progs_df.loc[0, "path"]
+		up_prog_path = enclosing_progs_df.loc[1, "path"]
+		master_prog_path = enclosing_progs_df.loc[(enclosing_progs_df["diam_val"] - diam_val).abs().argsort()[0], "path"]
 		res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
 		try:
 			shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
 		except FileNotFoundError as fnfe:
 			raise ValueError(f"No such result directory: {common.res_progs_dir}")
-		res_prog = vgpio.VgpProgram(res_prog_path, config_data.diam_name)
-		return res_prog
+
+		global low_prog, up_prog, res_prog
+		low_prog, up_prog, res_prog = vgpio.VgpProgram(low_prog_path, config_data.diam_name), vgpio.VgpProgram(up_prog_path, config_data.diam_name), vgpio.VgpProgram(res_prog_path, config_data.diam_name)
 
 	# @staticmethod
 	# def page_setup(self):

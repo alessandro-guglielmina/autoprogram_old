@@ -319,14 +319,16 @@ class CreateProgramPage(Page):
 		This code runs while the CreateProgramPage is displayed
 		"""
 		# Set diameter value
-		hp.config_data.set_diam_val()
+		hp.CreateProgramPage.set_diam_val()
 		# Select the master program and copy it to the result directory
-		res_prog = hp.CreateProgramPage.get_res_prog()
+		#res_prog = hp.CreateProgramPage.get_res_prog()
+		hp.CreateProgramPage.set_low_up_res_prog_paths()
 		self.progress_bar['value']=10
 
-		with res_prog:
+		with hp.res_prog as res_prog:
 			# 1) Value scaling
-			res_prog.scale_tool(hp.config_data.diam_name, hp.config_data.diam_val)
+			with hp.low_prog as low_prog, hp.up_prog as up_prog:
+				res_prog.scale_tool(hp.diam_val, low_prog, up_prog)
 			self.progress_bar['value']=20
 			# 2) update values update
 			hp.config_data.update_input_data(res_prog)

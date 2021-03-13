@@ -10,13 +10,13 @@ from autoprogram.openvgp.vgpio import VgpData
 
 CONFIG_FILE_FILENAME = "configuration file.xlsx"
 DIAM_NAME_SH_NAME = "diameter name"
-MASTER_SELECT_SH_NAME = "master selection"
+# MASTER_SELECT_SH_NAME = "master selection"
 INPUT_DATA_SH_NAME = "input data"
 REL_DATA_SH_NAME = "relationships"
 FUNCT_DATA_1_SH_NAME = "function data 1"
 FUNCT_DATA_2_SH_NAME = "function data 2"
 SCALE_VALS_SH_NAME = "scaled values"
-SHEET_NAMES_1 = [DIAM_NAME_SH_NAME, MASTER_SELECT_SH_NAME, SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
+SHEET_NAMES_1 = [DIAM_NAME_SH_NAME, SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
 FUNCT_DATA_SH_NAMES = [FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME] # read all the rows but the first 3
 # ALL_SHEET_NAMES = SHEET_NAMES_1 + SHEET_NAMES_2
 VGP_DATA_SEP = ","
@@ -67,7 +67,7 @@ class ConfigData(object):
 	@property
 	def scale_val_names_list(self):
 		"""
-		Description
+		This property returns the list of value names to be scaled
 		"""
 		scale_val_names_df = self.config_data_df[SCALE_VALS_SH_NAME].astype(str)
 		self._scale_val_names_list = scale_val_names_df.loc[:, "val_name"].to_list()
@@ -81,13 +81,13 @@ class ConfigData(object):
 		widget_name = data_name.replace(".", "_").lower()
 		return widget_name
 
-	def get_master_prog_name(self, diam_val):
-		master_prog_select_df = self.config_data_df[MASTER_SELECT_SH_NAME].astype({"low_diam": float, "up_diam": float, "master_prog_name": str})
-		filt = (master_prog_select_df.low_diam <= diam_val) & (master_prog_select_df.up_diam >= diam_val) # & performs element-wise evaluation
-		try:
-			return master_prog_select_df.loc[filt, "master_prog_name"].iloc[0] + common.vgp_suffix
-		except IndexError:
-			raise ValueError(f"No master program defined for such a diameter: {diam_val}")
+	# def get_master_prog_name(self, diam_val):
+	# 	master_prog_select_df = self.config_data_df[MASTER_SELECT_SH_NAME].astype({"low_diam": float, "up_diam": float, "master_prog_name": str})
+	# 	filt = (master_prog_select_df.low_diam <= diam_val) & (master_prog_select_df.up_diam >= diam_val) # & performs element-wise evaluation
+	# 	try:
+	# 		return master_prog_select_df.loc[filt, "master_prog_name"].iloc[0] + common.vgp_suffix
+	# 	except IndexError:
+	# 		raise ValueError(f"No master program defined for such a diameter: {diam_val}")
 
 	def get_gui_raw_data(self, input_data_page):
 		"""
