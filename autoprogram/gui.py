@@ -10,6 +10,7 @@ from autoprogram import common
 from autoprogram import helper as hp
 from autoprogram import settingsparser as sp
 from autoprogram import configdataparse as cdp
+from autoprogram.openvgp import vgpio
 # from autoprogram.helper import try_decorator
 
 DEFAULT_MODE = "create_manual"
@@ -98,7 +99,7 @@ class App(tk.Tk):
 
 	def root_setup(self, head_text=None, back_method=None, back_method_args=None, back_state=None, next_method=None, next_method_args=None, next_state=None):
 		"""
-		Description
+		This method configures the root frame (title and navigation buttons), if arguments are not passed no action is performed (things remain as before)
 		"""
 		if back_method_args == None:
 			back_method_args = []
@@ -136,6 +137,7 @@ class App(tk.Tk):
 			page.tkraise()
 			page.run(*args, **kwargs)
 		except ValueError as ve:
+			self.root_setup(next_state=tk.NORMAL, back_state=tk.NORMAL)
 			self.comm_label_write(ve)
 
 
@@ -307,8 +309,10 @@ class CreateProgramPage(Page):
 		"""
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
-		self.progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode='determinate')
-		self.progress_bar.grid(row=1, column=2, padx=40, pady=40)
+		self.progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode="determinate")
+		self.progress_bar.grid(row=0, column=1, padx=4, pady=40)
+		self.not_updated_names_label = tk.Label(self, width=60)
+		self.not_updated_names_label.grid(row=1, column=0, columnspan=4)
 
 	def run(self):
 		"""
@@ -318,6 +322,7 @@ class CreateProgramPage(Page):
 		hp.config_data.set_diam_val()
 		# Select the master program and copy it to the result directory
 		res_prog = hp.CreateProgramPage.get_res_prog()
+		self.progress_bar['value']=10
 
 		with res_prog:
 			# 1) Value scaling
@@ -335,14 +340,19 @@ class CreateProgramPage(Page):
 
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, next_state=tk.NORMAL, back_state=tk.NORMAL)
+		self.not_updated_names_label.config(text="Not updated names:  " + " ".join([str(name) for name in vgpio.not_updated_names]))
 		self.root.comm_label_write("Program created!")
 
 	#@try_decorator
 	def next_method(self):
+		# Set the global variable vgpio.not_updated_names
+		vgpio.not_updated_names =[]
 		self.root.show_page(SelectModePage)
 
 	#@try_decorator
 	def back_method(self):
+		# Set the global variable vgpio.not_updated_names
+		vgpio.not_updated_names =[]
 		# Set the global variable hp.fam_dir_path
 		hp.raw_inp_data = None
 		self.root.show_page(InputDataPage)

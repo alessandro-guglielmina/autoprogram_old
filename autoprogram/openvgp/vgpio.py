@@ -39,6 +39,9 @@ ALL_TABLES = R_TABLES.append(RW_TABLES) # Vgp_Data table must be read before the
 SEPARATOR = "."
 DIGITS_NUM = 4
 
+# global list containing not updated names
+not_updated_names = []
+
 
 class VgpData(pd.DataFrame):
 	"""
@@ -251,26 +254,32 @@ class VgpProgram(object):
 			set_values = vgp_data_df.loc[[name], ["val"]].values
 			set_sect_percs = vgp_data_df.loc[[name], ["sect_perc"]].values
 			# Cast values and set data depending on table
-			# Parameter
-			if table == PARAMETER.name:
-				set_values = [float(set_value) for set_value in set_values] # cast data
-				df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
-			# VGP_Value_Double
-			elif table == VGP_VALUE_DOUBLE.name:
-				set_values = [float(set_value) for set_value in set_values] # cast data
-				df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
-			# VGP_Value_FunctionD
-			elif table == VGP_VALUE_FUNCTIOND.name:
-				set_values = [float(set_value) for set_value in set_values] # cast data
-				set_sect_percs = [float(set_sect_perc) for set_sect_perc in set_sect_percs]
-				df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
-				df_temp.loc[[addr], [df_temp.sect_perc_col]] = set_sect_percs # set sect perc
-			# VGP_Value_Int
-			elif table == VGP_VALUE_INT.name:
-				set_values = [int(set_value) for set_value in set_values]
-				df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # set values
-			else:
-				raise ValueError("Data type not supported")
+			# If a name is not present in the program it's recorded among the not updated names
+			try:
+				# Parameter
+				if table == PARAMETER.name:
+					set_values = [float(set_value) for set_value in set_values] # cast data
+					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
+				# VGP_Value_Double
+				elif table == VGP_VALUE_DOUBLE.name:
+					set_values = [float(set_value) for set_value in set_values] # cast data
+					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
+				# VGP_Value_FunctionD
+				elif table == VGP_VALUE_FUNCTIOND.name:
+					set_values = [float(set_value) for set_value in set_values] # cast data
+					set_sect_percs = [float(set_sect_perc) for set_sect_perc in set_sect_percs]
+					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
+					df_temp.loc[[addr], [df_temp.sect_perc_col]] = set_sect_percs # set sect perc
+				# VGP_Value_Int
+				elif table == VGP_VALUE_INT.name:
+					set_values = [int(set_value) for set_value in set_values]
+					df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # set values
+				else:
+					raise ValueError("Data type not supported")
+			except KeyError:
+				# Set the global variable not_updated_names
+				global not_updated_names
+				not_updated_names.append(name)
 
 		# Arguments homogeneization
 		names = pd.Series(names)

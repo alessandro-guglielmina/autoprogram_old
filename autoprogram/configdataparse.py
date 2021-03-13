@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 import tkinter as tk
 import re
+from math import * # needed to read trigonometric functions in the configuration file
 
 from autoprogram import common
 from autoprogram.openvgp.vgpio import VgpData
@@ -121,7 +122,7 @@ class ConfigData(object):
 		"""
 		This method updates the input data coming from the previously saved DataFrame (self.input_df) in the program
 		"""
-		# Get the boolean filter corresponding to the names that are not auxiliary
+		# Get the boolean filter corresponding to the names that are not auxiliary (auxiliary names are not updated in the program)
 		inp_data_names = self.input_df.data_name
 		inp_data_names_filt = ~inp_data_names.str.upper().str.contains(AUX_STR, regex=False)
 		# Apply the filter
