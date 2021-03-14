@@ -1,10 +1,10 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
-from tkinter import filedialog # delete
-import threading # delete
-import os # delete
-from pathlib import Path # delete
+from tkinter import filedialog
+import threading
+import os
+from pathlib import Path
 
 from autoprogram import common
 from autoprogram import helper as hp
@@ -44,8 +44,8 @@ class App(tk.Tk):
 	"""
 	def __init__(self, *args, **kwargs):
 		tk.Tk.__init__(self, *args, **kwargs) # tk.Tk.__init__() used in place of super().__init__()
-		self.wm_title("autoprogram")
-		self.geometry('500x320')
+		self.wm_title(common.root_header)
+		self.geometry('600x580')
 		# Create a menu and its cascades
 		root_menu = tk.Menu(self)
 		self.config(menu=root_menu)
@@ -61,8 +61,8 @@ class App(tk.Tk):
 		# Create the container of the page frames, it's a frame inside the root
 		# (it's always the same frame because it's the one in the root)
 		# Its size is set to be always the same, regardless what's inside
-		self.page_container_frame = tk.Frame(self, height=200, highlightbackground="black", highlightthickness=1)
-		self.page_container_frame.grid(sticky="nswe", padx=20, columnspan=3) # set fixed size
+		self.page_container_frame = tk.Frame(self, height=400, highlightbackground="black", highlightthickness=1)
+		self.page_container_frame.grid(sticky="nswe", padx=10, columnspan=3) # set fixed size
 		# self.page_container_frame.rowconfigure(0, weight=1)
 		# self.page_container_frame.columnconfigure(0, weight=1)
 		self.page_container_frame.grid_propagate(0)
@@ -112,7 +112,7 @@ class App(tk.Tk):
 		# Head text setup
 		self.head_label.config(text=head_text)
 		# Back button setup
-		self.back_button.config(text="Back", state=back_state)
+		# self.back_button.config(text="Back", state=back_state)
 		if back_method is not None:
 			self.back_button.config(command=lambda: threading.Thread(target=back_method, args=back_method_args).start())
 		# Next button setup

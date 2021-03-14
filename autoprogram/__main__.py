@@ -1,8 +1,8 @@
-from autoprogram import guimodule as guim
+from autoprogram import gui
 
 def main():
 
-	guim.run()
+	gui.main()
 
 if __name__ == '__main__':
 	

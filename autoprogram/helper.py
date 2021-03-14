@@ -205,11 +205,18 @@ class CreateProgramPage(object):
 		prog_paths =pd.Series(fam_dir_path.glob('*' + common.vgp_suffix))
 		prog_diam_vals = pd.Series(prog_paths.apply(get_diam_val))
 		fam_progs_df = pd.DataFrame({"path": prog_paths, "diam_val": prog_diam_vals})
-		enclosing_progs_df = fam_progs_df.iloc[(fam_progs_df["diam_val"] - diam_val).abs().argsort()[:2], :].reset_index() # the enclosing programs are the two having the closest diameters, reset index is needed to keep positional row indexing
-		master_prog_path = enclosing_progs_df.loc[0, "path"] # the master program is the one having the closest diameter
-		low_prog_path = enclosing_progs_df.loc[enclosing_progs_df["diam_val"].argmin(), "path"]
-		up_prog_path = enclosing_progs_df.loc[enclosing_progs_df["diam_val"].argmax(), "path"]
-		#master_prog_path = enclosing_progs_df.loc[(enclosing_progs_df["diam_val"] - diam_val).abs().argsort()[0], "path"]
+		# Enclosing and master programs selection
+		# Lower program
+		low_filt = fam_progs_df["diam_val"] <= diam_val
+		low_progs_df = fam_progs_df.loc[low_filt, :].reset_index(drop=True)
+		low_prog_path = low_progs_df.loc[(low_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		# Upper program
+		up_filt = fam_progs_df["diam_val"] >= diam_val
+		up_progs_df = fam_progs_df.loc[up_filt, :].reset_index(drop=True)
+		up_prog_path = up_progs_df.loc[(up_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		# Master program
+		master_prog_path = fam_progs_df.loc[(fam_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		# Copy the master program to the result program path
 		res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
 		try:
 			shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory

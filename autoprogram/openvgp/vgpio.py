@@ -38,7 +38,7 @@ for rw_table_series in RW_TABLE_SERIES:
 	RW_TABLES.loc[rw_table_series.name] = rw_table_series
 ALL_TABLES = R_TABLES.append(RW_TABLES) # Vgp_Data table must be read before the other ones
 SEPARATOR = "."
-DIGITS_NUM = 4
+DECIMAL_DIGITS = 12
 
 # global list containing not updated names
 not_updated_names = []
@@ -313,46 +313,42 @@ class VgpProgram(object):
 		This method scales the specified input values (only the val field) performing
 		the linear interpolation between the programs at low_path and up_path
 		"""
-		def scale(diam, low_diam, low_ser, up_diam, up_ser):
+		def scaled_vals(low_ser, up_ser):
 			"""
 			Description
 			"""
-			def round_to_significant_figures(num, sf):
-				"""
-				Description
-				"""
-				try:
-					return round(num, sf - 1 - int(math.floor(math.log10(abs(num)))))
-				except ValueError:
-					return num
+			# def round_to_significant_figures(num, sf):
+			# 	"""
+			# 	Description
+			# 	"""
+			# 	try:
+			# 		return round(num, sf - 1 - int(math.floor(math.log10(abs(num)))))
+			# 	except ValueError:
+			# 		return num
 
 			if diam > up_diam or diam < low_diam:
 				raise ValueError("No value scaling is possible with the passed programs")
-			delta_diam = up_diam - low_diam
-			low_delta = diam - low_diam
-			up_delta = up_diam - diam
-			low_coeff = 1 - low_delta / delta_diam
-			up_coeff = 1 - up_delta / delta_diam
 			res = low_ser * low_coeff + up_ser * up_coeff
-			return res.apply(lambda num: round_to_significant_figures(num, 5)) # round values to 5 significant figures
+			return res.round(DECIMAL_DIGITS).to_list() # round values and make them an np.array(in order to perform assignment)
 
-		low_diam = low_prog[low_prog.diam_name].val.iloc[0]
-		up_diam = up_prog[up_prog.diam_name].val.iloc[0]
+		low_diam = low_prog.initial_diam
+		up_diam = up_prog.initial_diam
+		delta_diam = up_diam - low_diam
+		low_delta = diam - low_diam
+		up_delta = up_diam - diam
+		low_coeff = 1 - low_delta / delta_diam
+		up_coeff = 1 - up_delta / delta_diam
 		for table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND): # only these tables are scaled
 			df_temp = self.df[table.name]
 			# Parameter values relative to wheel geometry are not scaled
 			if table.name == PARAMETER.name:
 				curve_df = self.df[CURVE.name]
-				is_wheel_func = lambda PA_CurveId: True\
-								if self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME\
-								else False
+				is_wheel_func = lambda PA_CurveId: self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME
 				is_wheel_filt = df_temp.PA_CurveId.apply(is_wheel_func)
-				df_temp.loc[is_wheel_filt, table.val_col] = scale(diam, low_diam,\
-				low_prog.df[table.name].loc[is_wheel_filt, table.val_col], up_diam, up_prog.df[table.name].loc[is_wheel_filt, table.val_col])
+				#print(low_prog.df[table.name].loc[is_wheel_filt, table.val_col])
+				df_temp.loc[is_wheel_filt, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[is_wheel_filt, table.val_col], up_prog.df[table.name].loc[is_wheel_filt, table.val_col])
 			else:
-				df_temp[table.val_col] = scale(diam, low_diam,\
-				low_prog.df[table.name][table.val_col], up_diam, up_prog.df[table.name][table.val_col])
+				df_temp.loc[:, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.val_col], up_prog.df[table.name].loc[:, table.val_col])
 			# VGP_Value_FunctionD values are scaled also with respect to the sect_per column
 			if table.name == VGP_VALUE_FUNCTIOND.name:
-				df_temp[table.sect_perc_col] = scale(diam, low_diam,\
-				low_prog.df[table.name][table.sect_perc_col], up_diam, up_prog.df[table.name][table.sect_perc_col])
+				df_temp.loc[:, [table.sect_perc_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.sect_perc_col], up_prog.df[table.name].loc[:, table.sect_perc_col])

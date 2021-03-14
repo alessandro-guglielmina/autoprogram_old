@@ -5,9 +5,9 @@ import pandas as pd
 
 from autoprogram import settingsparser as sp
 
-copyright_header = 'AutoProgram.\nCopyright \xc2\xa9 2021 Guglielmina Alessandro. All rights reserved.\n'
-vgp_suffix = '.vgp'
-separator = '-'
+root_header = "AutoProgram. Copyright (c) 2021 Guglielmina Alessandro. All rights reserved."
+vgp_suffix = ".vgp"
+separator = "-"
 # settings file name
 settings_filename = sp.settings_filename # settings path with respect to the project root
 # work directories section
