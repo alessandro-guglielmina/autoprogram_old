@@ -15,8 +15,8 @@ INPUT_DATA_SH_NAME = "input data"
 REL_DATA_SH_NAME = "relationships"
 FUNCT_DATA_1_SH_NAME = "function data 1"
 FUNCT_DATA_2_SH_NAME = "function data 2"
-SCALE_VALS_SH_NAME = "scaled values"
-SHEET_NAMES_1 = [DIAM_NAME_SH_NAME, SCALE_VALS_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
+#SCALE_VALS_SH_NAME = "scaled values"
+SHEET_NAMES_1 = [DIAM_NAME_SH_NAME, INPUT_DATA_SH_NAME, REL_DATA_SH_NAME]
 FUNCT_DATA_SH_NAMES = [FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME] # read all the rows but the first 3
 # ALL_SHEET_NAMES = SHEET_NAMES_1 + SHEET_NAMES_2
 VGP_DATA_SEP = ","
@@ -192,7 +192,7 @@ class ConfigData(object):
 			# If the filter doesn't correspond to any row, it means that no function data correspond to that argument value
 			if (~filt).all():
 				raise ValueError(f"No function data defined for {arg_name} equal to {arg_val}")
-			select_funct_data_df = funct_data_df.loc[filt, :]
+			select_funct_data_df = funct_data_df.loc[filt, :].reset_index()
 			select_funct_data_df = select_funct_data_df.iloc[:, 2::] # the first two column are the arguments column and are not considered during data reading and updating in the program
 			# iterations over columns (rows already match the argument value)
 			for data_name in select_funct_data_df: # data_name = column heading
