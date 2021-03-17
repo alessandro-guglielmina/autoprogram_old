@@ -136,7 +136,7 @@ class InputDataPage(object):
 		"""
 		Description
 		"""
-		for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.input_df.data_name, config_data.input_df.data_descr)):
+		for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.inp_staging_df.data_name, config_data.inp_staging_df.data_descr)):
 			inp_data_entry = tk.Entry(input_data_page, width=20, name=cdp.ConfigData.to_widget_name(inp_data_name))
 			inp_data_label = tk.Label(input_data_page, width=20, text=inp_data_descr)
 			inp_data_entry.grid(row=i, column=1, padx=4, pady=4)
@@ -149,7 +149,7 @@ class InputDataPage(object):
 	# 	if mode == "create_manual":
 	# 		global raw_inp_data
 	# 		raw_inp_data = config_data.get_gui_raw_data(self)
-	# 		# Save input data inside config_data.input_df
+	# 		# Save input data inside config_data.inp_staging_df
 	# 		config_data.save_input_data(raw_inp_data)
 	# 		self.root.show_page(CreateProgramPage)
 	# 	else:
@@ -185,10 +185,10 @@ class CreateProgramPage(object):
 		"""
 		This method set the variable self.diam_val to the diameter value inserted by the user
 		"""
-		filt = config_data.input_df.data_name == config_data.diam_name
+		filt = config_data.inp_staging_df.data_name == config_data.diam_name
 		# Set the global variable diam_val
 		global diam_val
-		diam_val = float(config_data.input_df.loc[filt, "inp_val"].values[0])
+		diam_val = float(config_data.inp_staging_df.loc[filt, "val"].values[0])
 
 	@staticmethod
 	def set_low_up_res_prog_paths():
@@ -202,7 +202,7 @@ class CreateProgramPage(object):
 			with vgpio.VgpProgram(prog_path, config_data.diam_name) as prog:
 				return prog.initial_diam
 
-		prog_paths =pd.Series(fam_dir_path.glob('*' + common.vgp_suffix))
+		prog_paths =pd.Series(fam_dir_path.rglob('*' + common.vgp_suffix))
 		prog_diam_vals = pd.Series(prog_paths.apply(get_diam_val))
 		fam_progs_df = pd.DataFrame({"path": prog_paths, "diam_val": prog_diam_vals})
 		# Enclosing and master programs selection

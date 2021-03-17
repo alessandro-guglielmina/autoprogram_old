@@ -283,8 +283,8 @@ class InputDataPage(Page):
 		if hp.mode == "create_manual":
 			# Set the global variable hp.raw_inp_data
 			hp.raw_inp_data = hp.config_data.get_gui_raw_data(self)
-			# Save input data inside config_data.input_df
-			hp.config_data.save_input_data(hp.raw_inp_data)
+			# Save raw input data inside hp.config_data.inp_staging_df
+			cdp.ConfigData.save_staging_data(hp.config_data.inp_staging_df, hp.raw_inp_data)
 			self.root.show_page(CreateProgramPage)
 		else:
 			raise ValueError("Mode not supported yet")
@@ -320,22 +320,23 @@ class CreateProgramPage(Page):
 		"""
 		# Set diameter value
 		hp.CreateProgramPage.set_diam_val()
+		self.progress_bar['value']=10
 		# Select the master program and copy it to the result directory
 		#res_prog = hp.CreateProgramPage.get_res_prog()
 		hp.CreateProgramPage.set_low_up_res_prog_paths()
-		self.progress_bar['value']=10
+		self.progress_bar['value']=40
 
 		with hp.res_prog as res_prog:
 			# 1) Value scaling
 			with hp.low_prog as low_prog, hp.up_prog as up_prog: # indented context manager for the enclosing programs
 				res_prog.scale_tool(hp.diam_val, low_prog, up_prog)
-			self.progress_bar['value']=20
-			# 2) update values update
-			hp.config_data.update_input_data(res_prog)
-			self.progress_bar['value']=40
+			self.progress_bar['value']=50
+			# 2) update input values
+			cdp.ConfigData.update_staging_data(hp.config_data.inp_staging_df, res_prog)
+			self.progress_bar['value']=70
 			# 3) Relationships update
 			hp.config_data.update_relationships_data(res_prog)
-			self.progress_bar['value']=70
+			self.progress_bar['value']=90
 			# 4) Function values update
 			hp.config_data.update_function_data(res_prog)
 			self.progress_bar['value']=100
