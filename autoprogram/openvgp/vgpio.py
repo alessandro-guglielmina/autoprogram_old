@@ -1,5 +1,6 @@
+import sqlalchemy
+import sqlalchemy.sql.default_comparator
 import sqlite3 as sql
-import sqlalchemy as sqla
 import numpy as np
 import pandas as pd
 import math
@@ -258,33 +259,38 @@ class VgpProgram(object):
 		This method set the selected according to raw_data
 		"""
 		def set_data(name):
+			"""
+			This method starts from the parameter name, gets the table, the address, then cast the raw_data to the
+			right format and substitutes them in the program
+			"""
 			args_ser = self.get_arguments_ser(name) # get a DataFrame containing table and address correspondent to the name
 			table = args_ser["table"]
 			addr = args_ser["addr"]
 			df_temp = self.df[table]
-			set_values = vgp_data_df.loc[[name], ["val"]].values
-			set_sect_percs = vgp_data_df.loc[[name], ["sect_perc"]].values
+			# values in DataFrames are vectorized to be assigned to another DataFrame later
+			set_values = vgp_data_df.loc[[name], ["val"]].to_numpy()
+			set_sect_percs = vgp_data_df.loc[[name], ["sect_perc"]].to_numpy()
 			# Cast values and set data depending on table
 			# If a name is not present in the program it's recorded among the not updated names
 			try:
 				# Parameter
 				if table == PARAMETER.name:
-					set_values = [float(set_value) for set_value in set_values] # cast data
+					set_values = set_values.astype(np.float32) # cast data
 					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
 				# VGP_Value_Double
 				elif table == VGP_VALUE_DOUBLE.name:
-					set_values = [float(set_value) for set_value in set_values] # cast data
+					set_values = set_values.astype(np.float32) # cast data
 					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
 				# VGP_Value_FunctionD
 				elif table == VGP_VALUE_FUNCTIOND.name:
-					set_values = [float(set_value) for set_value in set_values] # cast data
-					set_sect_percs = [float(set_sect_perc) for set_sect_perc in set_sect_percs]
+					set_values = set_values.astype(np.float32) # cast data
+					set_sect_percs = set_values.astype(np.float32)
 					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
 					df_temp.loc[[addr], [df_temp.sect_perc_col]] = set_sect_percs # set sect perc
 				# VGP_Value_Int
 				elif table == VGP_VALUE_INT.name:
-					set_values = [int(set_value) for set_value in set_values]
-					df_temp.loc[[addr], [df_temp.val_col]] = vgp_data_df.loc[[name], ["val"]].values # set values
+					set_values = set_values.astype(int)
+					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
 				else:
 					raise ValueError("Data type not supported")
 			except KeyError:
@@ -329,7 +335,7 @@ class VgpProgram(object):
 			if diam > up_diam or diam < low_diam:
 				raise ValueError("No value scaling is possible with the passed programs")
 			res = low_ser * low_coeff + up_ser * up_coeff
-			return res.round(DECIMAL_DIGITS).to_list() # round values and make them an np.array(in order to perform assignment)
+			return res.round(DECIMAL_DIGITS).to_numpy() # round values and make them an np.array(in order to perform assignment)
 
 		low_diam = low_prog.initial_diam
 		up_diam = up_prog.initial_diam
