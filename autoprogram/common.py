@@ -5,7 +5,7 @@ import pandas as pd
 
 from autoprogram import settingsparser as sp
 
-root_header = "AutoProgram. Copyright (c) 2021 Guglielmina Alessandro. All rights reserved."
+root_header = "AutoProgram 1.0. Copyright (c) 2021 Guglielmina Alessandro. All rights reserved."
 vgp_suffix = ".vgp"
 separator = "-"
 # settings file name

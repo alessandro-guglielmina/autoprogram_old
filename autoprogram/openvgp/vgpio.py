@@ -300,7 +300,7 @@ class VgpProgram(object):
 
 		# Arguments homogeneization
 		names = pd.Series(names)
-		vgp_data_df = VgpData.to_vgp_data_df(names, raw_data)
+		vgp_data_df = VgpData.to_vgp_data_df(names, raw_data) # returns a DataFrame with "val" and "sect_perc" columns starting from the list format
 		# Setting data
 		names.apply(set_data)
 

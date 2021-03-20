@@ -43,8 +43,7 @@ class ConfigData(object):
 		# try to read the configuration file, it it's not present, throws a ValueError
 		try:
 			self.path = Path(fam_dir_path).joinpath(CONFIG_FILE_FILENAME)
-			config_data_1 = pd.read_excel(self.path, sheet_name=SHEET_NAMES_1)
-			self.config_data_df = config_data_1
+			self.config_data_df = pd.read_excel(self.path, sheet_name=SHEET_NAMES_1) # add diameter name, input data and relationships workhsheets by default
 		except FileNotFoundError:
 			raise ValueError(f"No configuration file in {fam_dir_path}")
 		# try to read two function data sheets, if any of them is absent, it simply goes on
@@ -56,8 +55,10 @@ class ConfigData(object):
 				self.funct_data_sh_names = self.funct_data_sh_names.append(funct_data_sh_name)
 			except KeyError:
 				pass
-		self.inp_staging_df = self.config_data_df[INPUT_DATA_SH_NAME].astype(str) # data_descr needed to display descriptions
-		self.rel_staging_df = self.config_data_df[REL_DATA_SH_NAME].astype(str) # rel_expr needed to calculate relationships values
+		self.inp_df = self.config_data_df[INPUT_DATA_SH_NAME].astype(str) # save input worksheet as DataFrame
+		aux_rel_filt = self.config_data_df[REL_DATA_SH_NAME].loc[:, "data_name"].str.contains(AUX_STR, case=False)
+		self.rel_sub_df = self.config_data_df[REL_DATA_SH_NAME].loc[~aux_rel_filt, :].astype(str).reset_index() # save relationships to be updated in the program in a DataFrame
+		self.rel_aux_df = self.config_data_df[REL_DATA_SH_NAME].loc[aux_rel_filt, :].astype(str).reset_index() # save auxiliary relationships (over which evaluations have to be performed) in a DataFrame 
 		self._diam_name = None
 		self._scale_val_names_list = None
 
@@ -69,52 +70,11 @@ class ConfigData(object):
 		diam_name_df = self.config_data_df[DIAM_NAME_SH_NAME].astype(str)
 		self._diam_name = diam_name_df.at[0, "diam_name"]
 		return self._diam_name
-	
-	# @property
-	# def scale_val_names_list(self):
-	# 	"""
-	# 	This property returns the list of value names to be scaled
-	# 	"""
-	# 	scale_val_names_df = self.config_data_df[SCALE_VALS_SH_NAME].astype(str)
-	# 	self._scale_val_names_list = scale_val_names_df.loc[:, "val_name"].to_list()
-	# 	return self._scale_val_names_list
-	
-	@staticmethod
-	def to_widget_name(data_name: str):
-		"""
-		This method replace the "." with "_", because the dot results in a bad widget name error
-		"""
-		widget_name = data_name.replace(".", "_").lower()
-		return widget_name
-
-	# def get_master_prog_name(self, diam_val):
-	# 	master_prog_select_df = self.config_data_df[MASTER_SELECT_SH_NAME].astype({"low_diam": float, "up_diam": float, "master_prog_name": str})
-	# 	filt = (master_prog_select_df.low_diam <= diam_val) & (master_prog_select_df.up_diam >= diam_val) # & performs element-wise evaluation
-	# 	try:
-	# 		return master_prog_select_df.loc[filt, "master_prog_name"].iloc[0] + common.vgp_suffix
-	# 	except IndexError:
-	# 		raise ValueError(f"No master program defined for such a diameter: {diam_val}")
-
-	def get_gui_raw_data(self, input_data_page):
-		"""
-		This method collect the raw string inputs inserted by the user (it's one way to get input data)
-		"""
-		raw_inp_data_list = []
-		for inp_data_name in self.inp_staging_df.data_name:
-			data_entry = input_data_page.nametowidget(ConfigData.to_widget_name(inp_data_name))
-			string_inp_data_i = data_entry.get()
-			try:
-				raw_inp_data_i = [float(string_inp_data_i)]
-			except ValueError:
-				pass
-			raw_inp_data_list.append(raw_inp_data_i)
-		raw_inp_data = pd.Series(raw_inp_data_list)
-		return raw_inp_data
 
 	@staticmethod
 	def save_staging_data(staging_df, raw_data: pd.Series):
 		"""
-		This method writes the input data in the self.inp_staging_df DataFrame
+		This method writes the input data in the passed staging_df DataFrame
 		"""
 		vgp_data = pd.DataFrame.from_records(raw_data)
 		staging_df["val"] = vgp_data.iloc[:, 0]
@@ -127,13 +87,13 @@ class ConfigData(object):
 		"""
 		This method set the variable self.diam_val to the diameter value inserted by the user
 		"""
-		filt = self.inp_staging_df["data_name"] == self.diam_name
-		self.diam_val = float(self.inp_staging_df.loc[filt, "val"].values[0])
+		filt = self.inp_df["data_name"] == self.diam_name
+		self.diam_val = float(self.inp_df.loc[filt, "val"].values[0])
 
 	@staticmethod
 	def update_staging_data(staging_df, res_prog):
 		"""
-		This method updates the input data coming from the previously saved DataFrame (self.inp_staging_df) in the program
+		This method updates the data coming from the previously saved DataFrame (staging_df) in the program
 		"""
 		# Get the boolean filter corresponding to the names that are not auxiliary (auxiliary names are not updated in the program)
 		data_names = staging_df.data_name
@@ -156,39 +116,38 @@ class ConfigData(object):
 		except SyntaxError:
 			raise ValueError('Wrong syntax in the relationship expressions.')
 
-	def get_arg_scalar_val(self, data_name_ser: pd.Series, res_prog) -> str:
-		"""
-		This method get the scalar value to put into the relations, data can be get from the program or from the input values if they are auxiliary (not updated in the program)
-		self comes at the second place, since this method must be iterated over an apply() method. Could be put inside update_relationships_data(), to mantain order
-		"""
-		data_name = data_name_ser.iloc[0]
-		# if the relation refers to an auxiliary parameter looks into the inp_staging_df
-		if AUX_STR in data_name.upper():
-			# search for auxiliary values in the two staging DataFrames (input and relationships)
-			inp_filt = self.inp_staging_df["data_name"] == data_name
-			rel_filt = self.rel_staging_df["data_name"] == data_name
-			# if the name is in the input staging DataFrame
-			if inp_filt.any():
-				val = self.inp_staging_df.loc[inp_filt, "val"].iloc[0]
-			# # if the name is in the relationships staging DataFrame
-			# elif rel_filt.any():
-			# 	val = self.rel_staging_df.loc[rel_filt, "val"].iloc[0]
-			else:
-				raise ValueError(f"No such an auxiliary value: {data_name}")
-		# otherwise looks directly in the program
-		else:
-			val = res_prog[data_name].iloc[0, 0] # get the "val" field of the data returned from the program
-			# if the returned value is not a scalar it's converted to scalar (values must be constant to have sense)
-			if hasattr(val, "__len__"):
-				val = val[0]
-		return val
-
-
 	def update_relationships_data(self, res_prog):
 		"""
 		In this method, for each relationship, data names are substituted with their correspondent data from the program
 		and then updated in the program itself
 		"""
+		def get_arg_scalar_val(data_name_ser: pd.Series, res_prog) -> str:
+			"""
+			This method get the scalar value to put into the relations, data can be get from the program or from the input values if they are auxiliary (not updated in the program)
+			self comes at the second place, since this method must be iterated over an apply() method. Could be put inside update_relationships_data(), to mantain order
+			"""
+			data_name = data_name_ser.iloc[0]
+			# if the relation refers to an auxiliary parameter looks into the inp_df
+			if AUX_STR in data_name.upper():
+				# search for auxiliary values in the two staging DataFrames (input and relationships)
+				aux_inp_filt = self.inp_df["data_name"] == data_name
+				aux_rel_filt = self.rel_aux_df["data_name"] == data_name
+				# if the name is in the input staging DataFrame
+				if aux_inp_filt.any():
+					val = self.inp_df.loc[aux_inp_filt, "val"].iloc[0]
+				# if the name is in the relationships staging DataFrame
+				elif aux_rel_filt.any():
+					val = self.rel_aux_df.loc[aux_rel_filt, "val"].iloc[0]
+				else:
+					raise ValueError(f"No such an auxiliary value: {data_name}")
+			# otherwise looks directly in the program
+			else:
+				val = res_prog[data_name].iloc[0, 0] # get the "val" field of the data returned from the program
+				# if the returned value is not a scalar it's converted to scalar (values must be constant to have sense)
+				if hasattr(val, "__len__"):
+					val = val[0]
+			return val
+
 		def sub_arg_scalar_vals_in_rel(rel_arg_data_df, raw_rel_expr):
 			"""
 			In each relation, for each argument name, this method substitutes the name with the actual scalar value
@@ -206,15 +165,20 @@ class ConfigData(object):
 			raw_rel_expr = rel_staging_row["rel_expr"]
 			rel_arg_data_names = re.findall(r'\$(.*?)\$', raw_rel_expr) # get a list with all the data names in the expression
 			rel_arg_data_df = pd.DataFrame(rel_arg_data_names, columns=["rel_arg_data_name"])# creates a DataFrame with arguments name (for each relation)
-			rel_arg_data_df[["rel_arg_data_scalar_val"]] = rel_arg_data_df.apply(lambda rel_arg_data_row: self.get_arg_scalar_val(rel_arg_data_row, res_prog), axis=1) # get values from the program and convert to scalar (in order to apply relations)
+			rel_arg_data_df[["rel_arg_data_scalar_val"]] = rel_arg_data_df.apply(lambda rel_arg_data_row: get_arg_scalar_val(rel_arg_data_row, res_prog), axis=1) # get values from the program and convert to scalar (in order to apply relations)
 			raw_rel_expr = sub_arg_scalar_vals_in_rel(rel_arg_data_df, raw_rel_expr) # substitutes argument names with correspondent scalar values
 			exec_rel_expr = "rel_exec_data = [" + raw_rel_expr + "]" # the relation to be evalued is assigned to the variable "exec_rel_expr"
 			raw_rel_data = ConfigData.var_from_python(exec_rel_expr, "rel_exec_data") # list with evalued data (both val and sect_perc)
 			return raw_rel_data
-		
-		self.rel_staging_df[["raw_rel_data"]] = self.rel_staging_df.apply(get_raw_rel_data_from_expr, axis=1)
-		ConfigData.save_staging_data(self.rel_staging_df, self.rel_staging_df["raw_rel_data"])
-		ConfigData.update_staging_data(self.rel_staging_df, res_prog)
+
+		# if there is any auxiliary relationship (if self.rel_aux_df is not an empty DataFrame)
+		if not self.rel_aux_df.empty:
+			self.rel_aux_df[["raw_rel_data"]] = self.rel_aux_df.apply(get_raw_rel_data_from_expr, axis=1) # compute expressions for auxiliary relationships
+			ConfigData.save_staging_data(self.rel_aux_df, self.rel_aux_df["raw_rel_data"]) # save auxiliary relationships val and sect_perc fields
+
+		self.rel_sub_df[["raw_rel_data"]] = self.rel_sub_df.apply(get_raw_rel_data_from_expr, axis=1) # compute expressions for relationships to be updated in the program
+		ConfigData.save_staging_data(self.rel_sub_df, self.rel_sub_df["raw_rel_data"]) # save relationships val and sect_perc fields to be updated in the program
+		ConfigData.update_staging_data(self.rel_sub_df, res_prog) # update relationships in the program
 
 	def update_function_data(self, res_prog):
 		"""
@@ -247,12 +211,3 @@ class ConfigData(object):
 							funct_data[0][0] = pd.Series(funct_data[0][0])/60
 						# update vgp data in the program (raw data are automatically converted to vgp data)
 						res_prog[data_name] = funct_data
-
-	# def get_config_df(self):
-	# 	config_df = {}
-	# 	for sheet_name in ALL_SHEET_NAMES:
-	# 		if sheet_name in SHEET_NAMES_1:
-	# 			config_df[sheet_name] = pd.read_excel(self.path, sheet_name = sheet_name, dtype=str)
-	# 		else:
-	# 			config_df[sheet_name] = pd.read_excel(self.path, sheet_name = sheet_name, dtype=str, skiprows=(0, 2))
-	# 	return config_df

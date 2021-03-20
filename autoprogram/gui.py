@@ -198,7 +198,7 @@ class Page(tk.Frame):
 
 class SelectModePage(Page):
 	"""
-	Description
+	In this page the user select te mode
 	"""
 	def __init__(self, container_frame, root):
 		super().__init__(container_frame, root)
@@ -210,11 +210,11 @@ class SelectModePage(Page):
 		inp_mode = tk.StringVar()
 		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual")
 		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update")
+		inp_mode.set("create_manual") # create_manual mode by default
 		create_manual_rb.grid(row=0, column=0, padx=10, pady=4)
 		update_rb.grid(row=1, column=0, padx=10, pady=4)
 		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[inp_mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
 
-	#@try_decorator
 	def next_method(self, inp_mode):
 		# Set the global variable hp.mode
 		hp.mode = inp_mode.get()
@@ -269,11 +269,7 @@ class InputDataPage(Page):
 		"""
 		Description
 		"""
-		try:
-			# Set the global variable hp.config_data
-			hp.config_data = cdp.ConfigData(hp.fam_dir_path)
-		except TypeError:
-			raise ValueError("Select a folder")
+		hp.InputDataPage.set_config_data()
 		hp.InputDataPage.grid_gui_data_entries(self)
 		self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
@@ -282,9 +278,9 @@ class InputDataPage(Page):
 	def next_method(self):
 		if hp.mode == "create_manual":
 			# Set the global variable hp.raw_inp_data
-			hp.raw_inp_data = hp.config_data.get_gui_raw_data(self)
-			# Save raw input data inside hp.config_data.inp_staging_df
-			cdp.ConfigData.save_staging_data(hp.config_data.inp_staging_df, hp.raw_inp_data)
+			hp.raw_inp_data = hp.InputDataPage.get_gui_raw_data(self,hp.config_data.inp_df.data_name)
+			# Save raw input data inside hp.config_data.inp_df
+			hp.InputDataPage.save_raw_inp_data()
 			self.root.show_page(CreateProgramPage)
 		else:
 			raise ValueError("Mode not supported yet")
@@ -293,6 +289,7 @@ class InputDataPage(Page):
 	def back_method(self):
 		# Set the global variable hp.fam_dir_path
 		hp.fam_dir_path = None
+		hp.InputDataPage.forget_gui_data_entries(self)
 		self.root.show_page(InitializationPage)
 
 
@@ -328,11 +325,10 @@ class CreateProgramPage(Page):
 
 		with hp.res_prog as res_prog:
 			# 1) Value scaling
-			with hp.low_prog as low_prog, hp.up_prog as up_prog: # indented context manager for the enclosing programs
-				res_prog.scale_tool(hp.diam_val, low_prog, up_prog)
+			hp.CreateProgramPage.scale_tool()
 			self.progress_bar['value']=50
 			# 2) update input values
-			cdp.ConfigData.update_staging_data(hp.config_data.inp_staging_df, res_prog)
+			hp.CreateProgramPage.update_inp_data()
 			self.progress_bar['value']=70
 			# 3) Relationships update
 			hp.config_data.update_relationships_data(res_prog)
@@ -356,145 +352,9 @@ class CreateProgramPage(Page):
 	def back_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]
-		# Set the global variable hp.fam_dir_path
+		# Set the global variable hp.raw_inp_data
 		hp.raw_inp_data = None
 		self.root.show_page(InputDataPage)
-
-	# def configure_root_and_next_page(self):
-	# 	"""
-	# 		this function has to be called after the user has chosen the family, in order to set up the parameter entries for the following page 
-	# 	"""
-
-		# self.root.comm_label.config(text="")
-		# self.root.head_label.config(text=page_frame.head_text)
-		# self.root.back_button.config(command=lambda: threading.Thread(target=self.root.show_frame(InsertParametersFrame).start(), state=page_frame.back_butt_state)
-		# self.root.next_button.config(command=lambda: threading.Thread(target=page_frame.confirm_function).start(), state=page_frame.confirm_butt_state)
-
-	# 	insert_params_frame = self.root.frames[InsertValuesPage]
-	# 	self.root.frames[InsertParametersFrame].head_text = "Input Parameters Page, Family: " + common.fam_name + ", Name: " + common.tool_name
-	# 	# Forget all the previously istantiated widgets
-	# 	try:
-	# 		for descr_label, entry in zip(self.root.frames[InsertValuesPage].descr_label_list, self.root.frames[InsertParametersFrame].entry_list):
-	# 			descr_label.grid_forget()
-	# 			entry.grid_forget()
-	# 	except AttributeError:
-	# 		pass # if an AttributeError is raised, it means no widget needs to be reset
-
-	# 	# get a list with all the input descriptions, with the same order of the input values
-	# 	insert_params_frame.descr_list = app.InsertParameters.get_params_descr()
-
-	# 	# get the number of input parameters
-	# 	insert_params_frame.params_num = len(insert_params_frame.descr_list)
-
-	# 	# create a list with all the labels containing input descriptions
-	# 	insert_params_frame.descr_label_list = [tk.Label(insert_params_frame, text=descr, width=20) for descr in insert_params_frame.descr_list]
-
-	# 	# create a list of entries (its length is equal to descr_list)
-	# 	insert_params_frame.entry_list = [tk.Entry(insert_params_frame, width=20) for i in range(insert_params_frame.params_num)]
-
-	# 	# create an entry box and its description for each input parameters
-	# 	for descr_label, entry, i in zip(insert_params_frame.descr_label_list, insert_params_frame.entry_list, range(insert_params_frame.params_num)):
-
-	# 		descr_label.grid(row=i, column=0)
-
-	# 		entry.grid(row=i, column=1)
-
-	# back_function and confirm_function are to be passed to the back and confirm buttons
-# 	def back_method(self):
-# 		pass
-
-# 	#@try_decorator
-# 	def next_method(self):
-# 		"""
-# 			This method is associated to the confirm button, it saves the user inputs into common variables
-# 			and get other common variables based on those
-# 		"""
-# 		fam_name = self.fam_listbox.get(tk.ANCHOR)
-# 		tool_name = self.tool_name_entry.get()
-# 		app.Initialize.get_fam_dependent_vars()
-# 		self.configure_insert_params_frame()
-# 		self.root.comm_label.config(text="")
-# 		self.root.show_frame(InsertParametersFrame)
-
-
-# class InsertParametersFrame(tk.Frame):
-
-# 	def __init__(self, container_frame, root):
-
-# 		# tk.Frame is used instead of super(), as tkinter classes are old
-# 		tk.Frame.__init__(self, container_frame) # instantiate itself inside the container frame (in the root)
-
-# 		# save the root in object variable
-# 		self.root = root
-
-# 		self.back_butt_state = tk.NORMAL
-
-# 		self.confirm_butt_state = tk.NORMAL
-
-
-# 	def create_program(self):
-
-# 		self.root.comm_label.config(text='creating the program...')
-
-# 		# function that creates the program, threaded in order to prevent the application from freezing
-# 		app.CreateProgram.run()
-
-# 		self.root.comm_label.config(text='program created!')
-
-
-# 	# back_function and confirm_function are to be passed to the back and confirm buttons
-# 	def back_function(self):
-
-# 		self.root.show_frame(InitializeFrame)
-
-
-# 	#@try_decorator
-# 	def confirm_function(self):
-
-# 		input_vals = []
-
-# 		for i, entry in enumerate(self.entry_list):
-
-# 			input_val = float(entry.get())
-
-# 			input_vals.append(input_val)
-
-# 		app.InsertParameters.save_input_params(input_vals)
-
-# 		self.root.show_frame(CreateProgramFrame)
-
-# 		# the create program process is triggered when the confirm button of the previous page is pushed
-# 		self.create_program()
-
-
-# class CreateProgramFrame(tk.Frame):
-
-# 	def __init__(self, container_frame, root):
-
-# 		# tk.Frame is used instead of super(), as tkinter classes are old
-# 		tk.Frame.__init__(self, container_frame) # instantiate itself inside the container frame (in the root)
-
-# 		# save the root in object variable
-# 		self.root = root
-
-# 		# features to be passed to the root template frame
-# 		self.head_text = "Create Program Page"
-
-# 		self.back_butt_state = tk.NORMAL
-
-# 		self.confirm_butt_state = tk.NORMAL
-
-
-# 	# back_function and confirm_function are to be passed to the back and confirm buttons
-# 	def back_function(self):
-
-# 		self.root.show_frame(InsertParametersFrame)
-
-
-# 	#@try_decorator
-# 	def confirm_function(self):
-
-# 		self.root.show_frame(InitializeFrame)
 
 
 def main():
