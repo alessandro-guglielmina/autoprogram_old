@@ -173,11 +173,11 @@ class ConfigData(object):
 
 		# if there is any auxiliary relationship (if self.rel_aux_df is not an empty DataFrame)
 		if not self.rel_aux_df.empty:
-			self.rel_aux_df[["raw_rel_data"]] = self.rel_aux_df.apply(get_raw_rel_data_from_expr, axis=1) # compute expressions for auxiliary relationships
-			ConfigData.save_staging_data(self.rel_aux_df, self.rel_aux_df["raw_rel_data"]) # save auxiliary relationships val and sect_perc fields
+			raw_aux_rel_data = self.rel_aux_df.apply(get_raw_rel_data_from_expr, axis=1) # compute expressions for auxiliary relationships
+			ConfigData.save_staging_data(self.rel_aux_df, raw_aux_rel_data) # save auxiliary relationships val and sect_perc fields
 
-		self.rel_sub_df[["raw_rel_data"]] = self.rel_sub_df.apply(get_raw_rel_data_from_expr, axis=1) # compute expressions for relationships to be updated in the program
-		ConfigData.save_staging_data(self.rel_sub_df, self.rel_sub_df["raw_rel_data"]) # save relationships val and sect_perc fields to be updated in the program
+		raw_sub_rel_data = self.rel_sub_df.apply(get_raw_rel_data_from_expr, axis=1) # compute expressions for relationships to be updated in the program
+		ConfigData.save_staging_data(self.rel_sub_df, raw_sub_rel_data) # save relationships val and sect_perc fields to be updated in the program
 		ConfigData.update_staging_data(self.rel_sub_df, res_prog) # update relationships in the program
 
 	def update_function_data(self, res_prog):
