@@ -280,7 +280,7 @@ class InputDataPage(Page):
 			# Set the global variable hp.raw_inp_data
 			hp.raw_inp_data = hp.InputDataPage.get_gui_raw_data(self,hp.config_data.inp_df.data_name)
 			# Save raw input data inside hp.config_data.inp_df
-			hp.InputDataPage.save_raw_inp_data()
+			hp.config_data.save_raw_inp_data(hp.raw_inp_data)
 			self.root.show_page(CreateProgramPage)
 		else:
 			raise ValueError("Mode not supported yet")
@@ -328,7 +328,7 @@ class CreateProgramPage(Page):
 			hp.CreateProgramPage.scale_tool()
 			self.progress_bar['value']=50
 			# 2) update input values
-			hp.CreateProgramPage.update_inp_data()
+			hp.config_data.update_input_data(res_prog)
 			self.progress_bar['value']=70
 			# 3) Relationships update
 			hp.config_data.update_relationships_data(res_prog)

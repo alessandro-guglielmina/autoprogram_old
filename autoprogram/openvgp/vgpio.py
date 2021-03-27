@@ -47,7 +47,8 @@ not_updated_names = []
 
 class VgpData(pd.DataFrame):
 	"""
-	This dtype is a DataFrame with one row and two columns: "val" and "sect_perc" 
+	This dtype is a DataFrame with one row and two columns: "val" and "sect_perc"
+	and an index equal to the data name
 	"""
 	def __init__(self, name, val, sect_perc=None):
 		if isinstance(sect_perc, pd.DataFrame) and isinstance(val, pd.DataFrame):
@@ -61,7 +62,7 @@ class VgpData(pd.DataFrame):
 			sect_perc_ser = pd.Series(np.nan)
 		else:
 			raise ValueError("Wrong VgpData arguments")
-		name_idx = pd.Index([name]).repeat(val_ser.size)
+		name_idx = pd.Index([name]).repeat(val_ser.size) # repeat the index name as many times as the data numbers
 		val_ser.index = name_idx
 		sect_perc_ser.index = name_idx
 		super().__init__({"val": val_ser, "sect_perc": sect_perc_ser})
@@ -69,9 +70,12 @@ class VgpData(pd.DataFrame):
 	@classmethod
 	def to_vgp_data_df(cls, names, raw_data):
 		"""
-		This method convert raw data in a certain format (specified below) to vgp data and pack them in a single DataFrame
+		This method convert raw data in a certain format (specified below) to vgp data and pack them in a single DataFrame.
+
+		1) List type raw data are in the form [[val1, np.nan], [[val21-val22], [sect_perc21-sect_perc22]], ...]
+
+		2) pd.DataFrame raw data are in the form pd.DataFrame({inp_val: [val1, val21-val22, ...], inp_sect_perc: [np.nan, sect_perc21-sect_perc22, ...]}
 		"""
-		# list type raw data are in the form [[val1, np.nan], [[val21-val22], [sect_perc21-sect_perc22]], ...]
 		if isinstance(raw_data, list):
 			vgp_data_list = []
 			for name, raw_data_i in zip(names, raw_data):
@@ -79,7 +83,6 @@ class VgpData(pd.DataFrame):
 				sect_perc_i = raw_data_i[1]
 				vgp_data_list.append(cls(name, val_i, sect_perc_i))
 			return pd.concat(vgp_data_list)
-		# pd.DataFrame raw data are in the form pd.DataFrame({inp_val: [val1, val21-val22, ...], inp_sect_perc: [np.nan, sect_perc21-sect_perc22, ...]}
 		elif isinstance(raw_data, pd.DataFrame):
 			vgp_data_list = []
 			for name, (row_idx, raw_data_i) in zip(names, raw_data.iterrows()): # using zip and iterrows needs this kind of unpacking
@@ -256,7 +259,9 @@ class VgpProgram(object):
 
 	def __setitem__(self, names, raw_data):
 		"""
-		This method set the selected according to raw_data
+		This method sets data corresponding to the passed names according to raw_data.
+		raw_data can be either DataFrames with two columns (one for val, one for sect_perc), coming from the program
+		or string that have to be parsed (separating the val field from the sect_perc_field)
 		"""
 		def set_data(name):
 			"""
@@ -307,7 +312,7 @@ class VgpProgram(object):
 	# def scale_tool(self, scale_val_names, current_diam):
 	# 	"""
 	# 	This method scales the specified input values (only the val field), by applying the ratio between the initial
-	# 	diameter and the current diameter
+	# 	diameter and the current diameter. This uses the __setite__ method
 	# 	"""
 	# 	# current_diam = self[self.diam_name].val.iloc[0] # diameter name returns 2 values (it's a Parameter)
 	# 	scaled_vals = self[scale_val_names] # copy of initial values
@@ -316,22 +321,14 @@ class VgpProgram(object):
 
 	def scale_tool(self, diam, low_prog, up_prog):
 		"""
-		This method scales the specified input values (only the val field) performing
-		the linear interpolation between the programs at low_path and up_path
+		This method scales data in Parameter, VGP_Value_Double, VGP_Value_FunctionD (only the val field) performing
+		the linear interpolation between the programs at low_path and up_path. This method doesn't use the __setite__ method
+		but acts directly on the DataFrames
 		"""
 		def scaled_vals(low_ser, up_ser):
 			"""
-			Description
+			This method take a lower and an upper series and returns another series that is the weighted average of the two
 			"""
-			# def round_to_significant_figures(num, sf):
-			# 	"""
-			# 	Description
-			# 	"""
-			# 	try:
-			# 		return round(num, sf - 1 - int(math.floor(math.log10(abs(num)))))
-			# 	except ValueError:
-			# 		return num
-
 			if diam > up_diam or diam < low_diam:
 				raise ValueError("No value scaling is possible with the passed programs")
 			res = low_ser * low_coeff + up_ser * up_coeff
@@ -346,15 +343,17 @@ class VgpProgram(object):
 		up_coeff = 1 - up_delta / delta_diam
 		for table in (PARAMETER, VGP_VALUE_DOUBLE, VGP_VALUE_FUNCTIOND): # only these tables are scaled
 			df_temp = self.df[table.name]
-			# Parameter values relative to wheel geometry are not scaled
+			# Parameter values relative to wheel geometry are not scaled (not necessary)
 			if table.name == PARAMETER.name:
 				curve_df = self.df[CURVE.name]
-				is_wheel_func = lambda PA_CurveId: self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME
-				is_wheel_filt = df_temp.PA_CurveId.apply(is_wheel_func)
-				#print(low_prog.df[table.name].loc[is_wheel_filt, table.val_col])
-				df_temp.loc[is_wheel_filt, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[is_wheel_filt, table.val_col], up_prog.df[table.name].loc[is_wheel_filt, table.val_col])
+				is_not_wheel_func = lambda PA_CurveId: self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME
+				is_not_wheel_filt = df_temp.PA_CurveId.apply(is_not_wheel_func)
+				# Original values are substituted with scaled values
+				df_temp.loc[is_not_wheel_filt, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[is_not_wheel_filt, table.val_col], up_prog.df[table.name].loc[is_not_wheel_filt, table.val_col])
+			# Otherwise all the data are scaled
 			else:
+				# Original values are substituted with scaled values
 				df_temp.loc[:, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.val_col], up_prog.df[table.name].loc[:, table.val_col])
 			# VGP_Value_FunctionD values are scaled also with respect to the sect_per column
-			if table.name == VGP_VALUE_FUNCTIOND.name:
-				df_temp.loc[:, [table.sect_perc_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.sect_perc_col], up_prog.df[table.name].loc[:, table.sect_perc_col])
+			# if table.name == VGP_VALUE_FUNCTIOND.name:
+			# 	df_temp.loc[:, [table.sect_perc_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.sect_perc_col], up_prog.df[table.name].loc[:, table.sect_perc_col])

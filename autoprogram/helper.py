@@ -115,13 +115,6 @@ class InputDataPage(object):
 			input_data_page.nametowidget(InputDataPage.to_widget_name(inp_data_name)).grid_forget()
 			input_data_page.nametowidget(InputDataPage.to_widget_name(inp_data_name + "_descr")).grid_forget() # inp_data_name + "_descr" is a unique id for the decription labels
 
-	@staticmethod
-	def save_raw_inp_data():
-		"""
-		Save raw input data from the user in config_data.inp_df, aprsing val and sect_perc
-		"""
-		cdp.ConfigData.save_staging_data(config_data.inp_df, raw_inp_data)
-
 
 class CreateProgramPage(object):
 	"""
@@ -135,7 +128,7 @@ class CreateProgramPage(object):
 		filt = config_data.inp_df.data_name == config_data.diam_name
 		# Set the global variable diam_val
 		global diam_val
-		diam_val = float(config_data.inp_df.loc[filt, "val"].values[0])
+		diam_val = float(config_data.inp_df.loc[filt, "raw_data"][0][0])
 
 	@staticmethod
 	def set_low_up_res_prog_paths():
@@ -180,11 +173,3 @@ class CreateProgramPage(object):
 		"""
 		with low_prog, up_prog: # indented context manager for the enclosing programs
 			res_prog.scale_tool(diam_val, low_prog, up_prog) # res_prog has already been open with the context manager in gui.py
-
-
-	@staticmethod
-	def update_inp_data():
-		"""
-		Update input data in the program
-		"""
-		cdp.ConfigData.update_staging_data(config_data.inp_df, res_prog)
