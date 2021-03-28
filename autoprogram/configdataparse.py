@@ -216,16 +216,18 @@ class ConfigData(object):
 			for arg_name in arg_names_list:
 				scalar_val = get_scalar_val(arg_name) # get a scalar value for each data name in the relationship
 				rel = re.sub(r'\${}\$'.format(arg_name), str(scalar_val), rel)
-			exec_rel = "raw_rel_data = [" + rel + "]" # the relation to be evalued is assigned to the variable "exec_rel_expr"
+			exec_rel = "raw_rel_data = [[" + rel + "]]" # the relation to be evalued is assigned to the variable "exec_rel_expr"
 			raw_rel_data = ConfigData.var_from_python(exec_rel, "raw_rel_data") # list with evalued data (both val and sect_perc)
 			# If it's an auxiliary name, raw_rel_data are put in the "raw_data" field in the self.rel_df DataFrame
-			# print(raw_rel_data, type(raw_rel_data))
+			# print(data_name + ": ",raw_rel_data)
 			# input("pause")
 			if AUX_STR in data_name.upper():
+				#print("Aux rel: ", raw_rel_data)
 				filt = self.rel_df["data_name"] == data_name
-				self.rel_df.loc[filt, "raw_data"] = [raw_rel_data]
+				self.rel_df.loc[filt, "raw_data"] = raw_rel_data
 			else:
-				res_prog[data_name] = [raw_rel_data]
+				#print("Sub rel: ", raw_rel_data)
+				res_prog[data_name] = raw_rel_data
 
 
 	def update_function_data(self, res_prog):

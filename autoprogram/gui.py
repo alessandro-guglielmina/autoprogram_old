@@ -333,7 +333,7 @@ class CreateProgramPage(Page):
 			# 3) Relationships update
 			hp.config_data.update_relationships_data(res_prog)
 			self.progress_bar['value']=90
-			# 4) Function values update
+			# # 4) Function values update
 			hp.config_data.update_function_data(res_prog)
 			self.progress_bar['value']=100
 

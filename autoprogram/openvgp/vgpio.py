@@ -273,8 +273,8 @@ class VgpProgram(object):
 			addr = args_ser["addr"]
 			df_temp = self.df[table]
 			# values in DataFrames are vectorized to be assigned to another DataFrame later
-			set_values = vgp_data_df.loc[[name], ["val"]].to_numpy()
-			set_sect_percs = vgp_data_df.loc[[name], ["sect_perc"]].to_numpy()
+			set_values = vgp_data_df.loc[[name], "val"].to_numpy()
+			set_sect_percs = vgp_data_df.loc[[name], "sect_perc"].to_numpy()
 			# Cast values and set data depending on table
 			# If a name is not present in the program it's recorded among the not updated names
 			try:
@@ -288,10 +288,18 @@ class VgpProgram(object):
 					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
 				# VGP_Value_FunctionD
 				elif table == VGP_VALUE_FUNCTIOND.name:
+					# print(name)
+					# print("set_values: ", set_values)
+					# print("set_sect_percs: ", set_sect_percs)
+					# print("before: ")
+					# print(df_temp.loc[[addr], [df_temp.val_col, df_temp.sect_perc_col]])
 					set_values = set_values.astype(np.float32) # cast data
-					set_sect_percs = set_values.astype(np.float32)
+					set_sect_percs = set_sect_percs.astype(np.float32)
 					df_temp.loc[[addr], [df_temp.val_col]] = set_values # set values
 					df_temp.loc[[addr], [df_temp.sect_perc_col]] = set_sect_percs # set sect perc
+					# print("after: ")
+					# print(df_temp.loc[[addr], [df_temp.val_col, df_temp.sect_perc_col]])
+					# input("pause")
 				# VGP_Value_Int
 				elif table == VGP_VALUE_INT.name:
 					set_values = set_values.astype(int)
