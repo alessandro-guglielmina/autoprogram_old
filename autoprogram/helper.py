@@ -162,7 +162,6 @@ class CreateProgramPage(object):
 			shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
 		except FileNotFoundError as fnfe:
 			raise ValueError(f"No such result directory: {common.res_progs_dir}")
-
 		global low_prog, up_prog, res_prog
 		low_prog, up_prog, res_prog = vgpio.VgpProgram(low_prog_path, config_data.diam_name), vgpio.VgpProgram(up_prog_path, config_data.diam_name), vgpio.VgpProgram(res_prog_path, config_data.diam_name)
 

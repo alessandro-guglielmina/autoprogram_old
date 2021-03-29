@@ -11,31 +11,8 @@ from autoprogram import helper as hp
 from autoprogram import settingsparser as sp
 from autoprogram import configdataparse as cdp
 from autoprogram.openvgp import vgpio
-# from autoprogram.helper import try_decorator
 
 DEFAULT_MODE = "create_manual"
-
-
-# def# try_decorator(target_method):
-# 	"""
-# 	This decorator is added to any confirm function, in order to print the error (if any) on the communication label
-# 	"""
-# 	def wrapper_function(*args, **kwargs):
-# 		try:
-# 			args[0].root.comm_label_write("")
-# 			return target_method(*args, **kwargs)
-# 		except ValueError as ve:
-# 			args[0].root.comm_label_write(ve) # args[0] is self, i.e. the frame object (the page)
-# 	return wrapper_function
-
-# def reset_comm_label(next_method):
-# 	"""
-# 	Description
-# 	"""
-# 	def wrapper_function(*args, **kwargs):
-# 		args[0].root.comm_label.config(text="") # args[0] is self, i.e. the frame object (the page)
-# 		return next_method(*args, **kwargs)
-# 	return wrapper_function
 
 
 class App(tk.Tk):
@@ -55,7 +32,6 @@ class App(tk.Tk):
 		file_menu.add_command(label="Exit", command=self.quit)
 		# The following widgets get their features from the specific page
 		# create an heading
-		# self.mode = None
 		self.head_label = tk.Label(self, width=70, height=3)
 		self.head_label.grid(row=0, column=0, columnspan=3)
 		# Create the container of the page frames, it's a frame inside the root
@@ -84,7 +60,6 @@ class App(tk.Tk):
 		"""
 		settings_window = SettingsWindow(self) # instantiate another window, passing the root (self) as argument
 
-	##@try_decorator
 	def instantiate_page_frames(self):
 		"""
 		This method instantiates all the page frames without choice-dependent customization
@@ -112,7 +87,6 @@ class App(tk.Tk):
 		# Head text setup
 		self.head_label.config(text=head_text)
 		# Back button setup
-		# self.back_button.config(text="Back", state=back_state)
 		if back_method is not None:
 			self.back_button.config(command=lambda: threading.Thread(target=back_method, args=back_method_args).start())
 		# Next button setup
@@ -128,7 +102,9 @@ class App(tk.Tk):
 
 	def show_page(self, page_name, *args, **kwargs):
 		"""
-		Description
+		This method is used either when the Next or the Back button is pushed,
+		it selects the page, then triggers the page_setup() method, then perform what's inside the
+		run() method (if any)
 		"""
 		try:
 			self.comm_label_write("")
@@ -210,7 +186,7 @@ class SelectModePage(Page):
 		inp_mode = tk.StringVar()
 		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual")
 		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update")
-		inp_mode.set("create_manual") # create_manual mode by default
+		inp_mode.set(DEFAULT_MODE) # DEFAULT_MODE (global variable) mode by default
 		create_manual_rb.grid(row=0, column=0, padx=10, pady=4)
 		update_rb.grid(row=1, column=0, padx=10, pady=4)
 		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[inp_mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
@@ -245,13 +221,11 @@ class InitializationPage(Page):
 		else:
 			raise ValueError("Mode not supported yet")
 
-	#@try_decorator
 	def next_method(self):
 		self.root.show_page(InputDataPage)
 		# Set the global variable hp.res_prog_name
 		hp.res_prog_name = self.tool_name_entry.get()
 
-	#@try_decorator
 	def back_method(self):
 		# Set the global variable hp.mode
 		hp.mode = None
@@ -274,7 +248,6 @@ class InputDataPage(Page):
 		self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 
-	#@try_decorator
 	def next_method(self):
 		if hp.mode == "create_manual":
 			# Set the global variable hp.raw_inp_data
@@ -282,10 +255,10 @@ class InputDataPage(Page):
 			# Save raw input data inside hp.config_data.inp_df
 			hp.config_data.save_raw_inp_data(hp.raw_inp_data)
 			self.root.show_page(CreateProgramPage)
+			hp.InputDataPage.forget_gui_data_entries(self)
 		else:
 			raise ValueError("Mode not supported yet")
 
-	#@try_decorator
 	def back_method(self):
 		# Set the global variable hp.fam_dir_path
 		hp.fam_dir_path = None
@@ -302,7 +275,7 @@ class CreateProgramPage(Page):
 
 	def page_setup(self):
 		"""
-		Description
+		This code runs before the CreateProgramPage is displayed
 		"""
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
@@ -342,13 +315,11 @@ class CreateProgramPage(Page):
 		self.not_updated_names_label.config(text="Not updated names:  " + " ".join([str(name) for name in vgpio.not_updated_names]))
 		self.root.comm_label_write("Program created!")
 
-	#@try_decorator
 	def next_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]
 		self.root.show_page(SelectModePage)
 
-	#@try_decorator
 	def back_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]
