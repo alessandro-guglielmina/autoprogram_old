@@ -298,7 +298,8 @@ class CreateProgramPage(Page):
 
 		with hp.res_prog as res_prog:
 			# 1) Value scaling
-			hp.CreateProgramPage.scale_tool()
+			if hp.low_prog  and hp.low_prog: # tool scaling make sense only if a result program isn't a master itself (i.e. hp.low_prog and hp.up_prog haven't been set to None)
+				hp.CreateProgramPage.scale_tool()
 			self.progress_bar['value']=50
 			# 2) update input values
 			hp.config_data.update_input_data(res_prog)
