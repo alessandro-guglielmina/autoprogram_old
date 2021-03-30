@@ -353,7 +353,10 @@ class VgpProgram(object):
 			# Otherwise all the data are scaled
 			else:
 				# Original values are substituted with scaled values
-				df_temp.loc[:, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.val_col], up_prog.df[table.name].loc[:, table.val_col])
+				try:
+					df_temp.loc[:, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.val_col], up_prog.df[table.name].loc[:, table.val_col])
+				except ValueError:
+					raise ValueError(f"Lower and upper program for the diameter {diam} must have the same parameters!")
 			# VGP_Value_FunctionD values are scaled also with respect to the sect_per column
 			# if table.name == VGP_VALUE_FUNCTIOND.name:
 			# 	df_temp.loc[:, [table.sect_perc_col]] = scaled_vals(low_prog.df[table.name].loc[:, table.sect_perc_col], up_prog.df[table.name].loc[:, table.sect_perc_col])

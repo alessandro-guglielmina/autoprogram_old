@@ -163,7 +163,7 @@ class CreateProgramPage(object):
 		except FileNotFoundError as fnfe:
 			raise ValueError(f"No such result directory: {common.res_progs_dir}")
 		# If the program is not a master itself, then a lower and an upper program are needed to scale the result program
-		global low_prog, up_prog, res_prog
+		global low_prog, up_prog
 		if low_prog_path != up_prog_path:
 			low_prog, up_prog = vgpio.VgpProgram(low_prog_path, config_data.diam_name), vgpio.VgpProgram(up_prog_path, config_data.diam_name)
 		else:
