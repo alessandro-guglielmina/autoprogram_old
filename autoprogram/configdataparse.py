@@ -114,7 +114,7 @@ class ConfigData(object):
 			var = local_dict[var_name]
 			return var
 		except SyntaxError:
-			raise ValueError('Wrong syntax in the relationship expressions.')
+			raise ValueError(f'Wrong syntax in the relationship expression: {python_expr}.')
 
 	def update_relationships_data(self, res_prog):
 		"""
@@ -139,6 +139,8 @@ class ConfigData(object):
 				return scalar_val
 			except IndexError:
 				pass
+			except KeyError:
+				raise ValueError("Tried to access data from user input")
 			#Try to search for the auxiliary value inside self.rel_df
 			try:
 				filt = self.rel_df.data_name == name

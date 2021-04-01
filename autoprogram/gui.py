@@ -5,6 +5,7 @@ from tkinter import filedialog
 import threading
 import os
 from pathlib import Path
+import logging
 
 from autoprogram import common
 from autoprogram import helper as hp
@@ -12,6 +13,8 @@ from autoprogram import settingsparser as sp
 from autoprogram import configdataparse as cdp
 from autoprogram.openvgp import vgpio
 
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger("my_logger")
 DEFAULT_MODE = "create_manual"
 
 
@@ -210,24 +213,38 @@ class InitializationPage(Page):
 		"""
 		if hp.mode == "create_manual":
 			hp.InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
-			tool_name_label = tk.Label(self, text="Tool Name: ")
-			tool_name_label.grid(row=1, column=0, padx=4, pady=4)
+			self.tool_name_label = tk.Label(self, text="Tool Name: ")
+			self.tool_name_label.grid(row=1, column=0, padx=4, pady=4)
 			self.tool_name_entry = tk.Entry(self, width=34)
 			self.tool_name_entry.grid(row=1, column=1, padx=4, pady=4)
-			self.browse_butt.config(command=lambda: threading.Thread(target=hp.InitializationPage.decorated_askdirectory(self, common.master_progs_dir)).start())
+			self.browse_butt.config(command=lambda: threading.Thread(target=hp.InitializationPage.set_fam_dir_path(self, common.master_progs_dir)).start())
 			# Constant root setup (independent from the selected mode)
-			self.root.root_setup(head_text="Initialization Page", back_method=self.back_method,\
+			self.root.root_setup(head_text="Initialization Page: Create Manual Mode", back_method=self.back_method,\
+			next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
+		elif hp.mode == "update":
+			hp.InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
+			self.browse_butt.config(command=lambda: threading.Thread(target=hp.InitializationPage.set_fam_dir_path(self, common.master_progs_dir)).start())
+			# Constant root setup (independent from the selected mode)
+			self.root.root_setup(head_text="Initialization Page: Update Mode", back_method=self.back_method,\
 			next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 		else:
 			raise ValueError("Mode not supported yet")
 
 	def next_method(self):
-		self.root.show_page(InputDataPage)
-		# Set the global variable hp.res_prog_name
-		hp.res_prog_name = self.tool_name_entry.get()
+		hp.InitializationPage.set_config_data()
+		if hp.mode == "create_manual":
+			# Set the global variable hp.res_prog_name
+			self.tool_name_entry.grid_forget()
+			self.tool_name_label.grid_forget()
+			hp.res_prog_name = self.tool_name_entry.get()
+			self.root.show_page(InputDataPage)
+		elif hp.mode == "update":
+			self.root.show_page(CreateProgramPage)
 
 	def back_method(self):
 		# Set the global variable hp.mode
+		self.tool_name_entry.grid_forget()
+		self.tool_name_label.grid_forget()
 		hp.mode = None
 		self.root.show_page(SelectModePage)
 
@@ -243,7 +260,6 @@ class InputDataPage(Page):
 		"""
 		Description
 		"""
-		hp.InputDataPage.set_config_data()
 		hp.InputDataPage.grid_gui_data_entries(self)
 		self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
@@ -257,7 +273,7 @@ class InputDataPage(Page):
 			self.root.show_page(CreateProgramPage)
 			hp.InputDataPage.forget_gui_data_entries(self)
 		else:
-			raise ValueError("Mode not supported yet")
+			raise ValueError("Something went wrong")
 
 	def back_method(self):
 		# Set the global variable hp.fam_dir_path
@@ -288,28 +304,41 @@ class CreateProgramPage(Page):
 		"""
 		This code runs while the CreateProgramPage is displayed
 		"""
-		# Set diameter value
-		hp.CreateProgramPage.set_diam_val()
 		self.progress_bar['value']=10
-		# Select the master program and copy it to the result directory
-		#res_prog = hp.CreateProgramPage.get_res_prog()
-		hp.CreateProgramPage.set_low_up_res_prog_paths()
-		self.progress_bar['value']=40
+		# process to create a program
+		if hp.mode == "create_manual":
+			# Set diameter value
+			hp.CreateProgramPage.set_diam_val()
+			self.progress_bar['value']=20
+			# Select the master program and copy it to the result directory
+			#res_prog = hp.CreateProgramPage.get_res_prog()
+			hp.CreateProgramPage.set_low_up_res_prog_paths()
+			self.progress_bar['value']=40
+			with hp.res_prog as res_prog:
+				# 1) Value scaling
+				if hp.low_prog and hp.up_prog: # tool scaling make sense only if a result program isn't a master itself (i.e. hp.low_prog and hp.up_prog haven't been set to None)
+					hp.CreateProgramPage.scale_tool()
+				self.progress_bar['value']=50
+				# 2) update input values
+				hp.config_data.update_input_data(res_prog)
+				self.progress_bar['value']=70
+				# 3) Relationships update
+				hp.config_data.update_relationships_data(res_prog)
+				self.progress_bar['value']=90
+				# # 4) Function values update
+				hp.config_data.update_function_data(res_prog)
+		# process to update many programs in a directory
+		elif hp.mode == "update":
+			update_prog_path_list = hp.CreateProgramPage.get_update_prog_list()
+			for update_prog_path in update_prog_path_list:
+				LOGGER.info(f"Updating the program at {update_prog_path}")
+				with vgpio.VgpProgram(update_prog_path, hp.config_data.diam_name) as update_prog:
+					# 1) Relationships update
+					hp.config_data.update_relationships_data(update_prog)
+					# 2) Function values update
+					hp.config_data.update_function_data(update_prog)
+		self.progress_bar['value']=100
 
-		with hp.res_prog as res_prog:
-			# 1) Value scaling
-			if hp.low_prog and hp.up_prog: # tool scaling make sense only if a result program isn't a master itself (i.e. hp.low_prog and hp.up_prog haven't been set to None)
-				hp.CreateProgramPage.scale_tool()
-			self.progress_bar['value']=50
-			# 2) update input values
-			hp.config_data.update_input_data(res_prog)
-			self.progress_bar['value']=70
-			# 3) Relationships update
-			hp.config_data.update_relationships_data(res_prog)
-			self.progress_bar['value']=90
-			# # 4) Function values update
-			hp.config_data.update_function_data(res_prog)
-			self.progress_bar['value']=100
 
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, next_state=tk.NORMAL, back_state=tk.NORMAL)
@@ -324,9 +353,12 @@ class CreateProgramPage(Page):
 	def back_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]
-		# Set the global variable hp.raw_inp_data
-		hp.raw_inp_data = None
-		self.root.show_page(InputDataPage)
+		if hp.mode == "create_manual":
+			# Set the global variable hp.raw_inp_data
+			hp.raw_inp_data = None
+			self.root.show_page(InputDataPage)
+		else:
+			self.root.show_page(InitializationPage)
 
 
 def main():

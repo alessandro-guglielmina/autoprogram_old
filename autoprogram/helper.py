@@ -42,7 +42,7 @@ class InitializationPage(object):
 		initialization_page_frame.browse_butt.grid(row=0, column=2, padx=4, pady=4)
 
 	@try_decorator
-	def decorated_askdirectory(initialization_page_frame, initialdir):
+	def set_fam_dir_path(initialization_page_frame, initialdir):
 		"""
 		Set the global variable fam_dir_path. Browse button to look for the family directory. If the directory doesn't exists, throws a ValueError
 		"""
@@ -53,11 +53,6 @@ class InitializationPage(object):
 		fam_dir_path = Path(filedialog.askdirectory(initialdir=initialdir))
 		initialization_page_frame.browse_entry.insert(0, fam_dir_path.as_posix())
 
-
-class InputDataPage(object):
-	"""
-	Description
-	"""
 	@staticmethod
 	def set_config_data():
 		"""
@@ -70,6 +65,11 @@ class InputDataPage(object):
 		except TypeError:
 			raise ValueError("Select a folder")
 
+
+class InputDataPage(object):
+	"""
+	Description
+	"""
 	@staticmethod
 	def to_widget_name(data_name: str):
 		"""
@@ -131,6 +131,10 @@ class CreateProgramPage(object):
 		diam_val = float(config_data.inp_df.loc[filt, "raw_data"][0][0])
 
 	@staticmethod
+	def get_update_prog_list():
+		return fam_dir_path.rglob('*' + common.vgp_suffix)
+
+	@staticmethod
 	def set_low_up_res_prog_paths():
 		"""
 		This method sets the lower, upper and result program paths as global variables
@@ -149,20 +153,25 @@ class CreateProgramPage(object):
 		# Lower program
 		low_filt = fam_progs_df["diam_val"] <= diam_val
 		low_progs_df = fam_progs_df.loc[low_filt, :].reset_index(drop=True)
-		low_prog_path = low_progs_df.loc[(low_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		try:
+			low_prog_path = low_progs_df.loc[(low_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		except ValueError:
+			raise ValueError("The selected diameter is lower than the master programs.")
 		# Upper program
 		up_filt = fam_progs_df["diam_val"] >= diam_val
 		up_progs_df = fam_progs_df.loc[up_filt, :].reset_index(drop=True)
-		up_prog_path = up_progs_df.loc[(up_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		try:
+			up_prog_path = up_progs_df.loc[(up_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
+		except ValueError:
+			raise ValueError("The selected diameter is higher than the master programs.")
 		# Master program
 		master_prog_path = fam_progs_df.loc[(fam_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
 		# Copy the master program to the result program path
 		res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
-		try:
-			shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
-		except FileNotFoundError as fnfe:
-			raise ValueError(f"No such result directory: {common.res_progs_dir}")
-		# If the program is not a master itself, then a lower and an upper program are needed to scale the result program
+		# Make the result directory, if doesn't already exist
+		os.makedirs(os.path.dirname(res_prog_path), exist_ok=True)
+		shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
+		# Create VGP program objects
 		global low_prog, up_prog
 		if low_prog_path != up_prog_path:
 			low_prog, up_prog = vgpio.VgpProgram(low_prog_path, config_data.diam_name), vgpio.VgpProgram(up_prog_path, config_data.diam_name)
