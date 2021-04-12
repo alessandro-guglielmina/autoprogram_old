@@ -101,7 +101,7 @@ class InputDataPage(object):
 			try:
 				raw_inp_data_i = [float(string_inp_data_i)]
 			except ValueError:
-				pass
+				raw_inp_data_i = ['"' + string_inp_data_i + '"']
 			raw_inp_data_list.append(raw_inp_data_i)
 		raw_inp_data = pd.Series(raw_inp_data_list)
 		return raw_inp_data

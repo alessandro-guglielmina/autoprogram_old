@@ -99,8 +99,6 @@ class ConfigData(object):
 		inp_data_names = self.inp_df.data_name
 		inp_data_names_filt = ~inp_data_names.str.upper().str.contains(AUX_STR, regex=False) # get the boolean filter corresponding to the names that are not auxiliary (auxiliary names are not updated in the program)
 		inp_data_names = inp_data_names[inp_data_names_filt] # get only the not auxiliary names
-		# print(self.inp_df.loc[inp_data_names_filt, "raw_data"].to_list())
-		# input("pause")
 		res_prog[inp_data_names] = self.inp_df.loc[inp_data_names_filt, "raw_data"].to_list()
 
 	@staticmethod
@@ -176,8 +174,6 @@ class ConfigData(object):
 		if self.funct_dfs: # if there are function data sheets
 			for i in range(len(self.funct_dfs)):
 				funct_data_df = self.funct_dfs[i]
-				print(funct_data_df)
-				input("pause")
 				funct_data_df.iloc[:, [0, 1]] = funct_data_df.iloc[:, [0, 1]].astype(float) # the first two columns are casted as float
 				arg_name = funct_data_df.columns[0] # argument name is the first column heading
 				arg_val = res_prog[arg_name].val.iloc[0] # select the val and the first element only (in case of Parameter and VGP_Value_FunctionD data)
