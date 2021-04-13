@@ -61,7 +61,10 @@ class InitializationPage(object):
 		try:
 			# Set the global variable config_data
 			global config_data
-			config_data = cdp.ConfigData(fam_dir_path)
+			if mode == "create_manual" or mode == "create_auto":
+				config_data = cdp.ConfigData(fam_dir_path, "create")
+			elif  mode == "update":
+				config_data = cdp.ConfigData(fam_dir_path, "update")
 		except TypeError:
 			raise ValueError("Select a folder")
 
@@ -98,8 +101,10 @@ class InputDataPage(object):
 		for inp_data_name in input_data_names:
 			data_entry = input_data_page.nametowidget(InputDataPage.to_widget_name(inp_data_name))
 			string_inp_data_i = data_entry.get()
+			# if the user input can be casted as float, it's converted as float
 			try:
 				raw_inp_data_i = [float(string_inp_data_i)]
+			# otherwise is kept as a string variable
 			except ValueError:
 				raw_inp_data_i = ['"' + string_inp_data_i + '"']
 			raw_inp_data_list.append(raw_inp_data_i)
@@ -165,12 +170,18 @@ class CreateProgramPage(object):
 		except ValueError:
 			raise ValueError("The selected diameter is higher than the master programs.")
 		# Master program
-		master_prog_path = fam_progs_df.loc[(fam_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
-		# Copy the master program to the result program path
-		res_prog_path = common.res_progs_dir.joinpath(res_prog_name + common.vgp_suffix)
-		# Make the result directory, if doesn't already exist
-		os.makedirs(os.path.dirname(res_prog_path), exist_ok=True)
-		shutil.copyfile(master_prog_path, res_prog_path) # copy the master program file to the result directory
+		master_prog_path = Path(fam_progs_df.loc[(fam_progs_df["diam_val"] - diam_val).abs().argmin(), "path"])
+		master_parent_dir = master_prog_path.parents[0]
+		machine = master_prog_path.stem.split("_")[1]
+		comp_res_prog_name = res_prog_name + "_" + machine
+		# Copy the master program to the result directory and get the result program parent directory
+		res_prog_parent_dir = shutil.copytree(master_prog_path.parents[0], common.res_progs_dir.joinpath(comp_res_prog_name), dirs_exist_ok=True)
+		# Rename the result program
+		res_prog_path_temp = next(res_prog_parent_dir.glob('*' + common.vgp_suffix))
+		res_prog_path = res_prog_path_temp.rename(Path(res_prog_parent_dir, comp_res_prog_name + common.vgp_suffix))
+		# Rename wheel datasheet
+		ds_path = next(res_prog_parent_dir.glob("*.docm"))
+		ds_path.rename(Path(res_prog_parent_dir, "DS_" + comp_res_prog_name + ".docm"))
 		# Create VGP program objects
 		global low_prog, up_prog
 		if low_prog_path != up_prog_path:

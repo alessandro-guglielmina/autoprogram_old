@@ -230,6 +230,7 @@ class InitializationPage(Page):
 		else:
 			raise ValueError("Mode not supported yet")
 
+	@hp.try_decorator
 	def next_method(self):
 		hp.InitializationPage.set_config_data()
 		if hp.mode == "create_manual":
@@ -264,6 +265,7 @@ class InputDataPage(Page):
 		self.root.root_setup(head_text="Input Data Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 
+	@hp.try_decorator
 	def next_method(self):
 		if hp.mode == "create_manual":
 			# Set the global variable hp.raw_inp_data
@@ -345,6 +347,7 @@ class CreateProgramPage(Page):
 		self.not_updated_names_label.config(text="Not updated names:  " + " ".join([str(name) for name in vgpio.not_updated_names]))
 		self.root.comm_label_write("Program created!")
 
+	@hp.try_decorator
 	def next_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]

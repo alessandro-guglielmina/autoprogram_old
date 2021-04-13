@@ -8,14 +8,9 @@ from math import * # needed to read trigonometric functions in the configuration
 from autoprogram import common
 from autoprogram.openvgp.vgpio import VgpData
 
-CONFIG_FILE_FILENAME = "configuration file.xlsx"
-DIAM_NAME_SH_NAME = "diameter name"
-INPUT_DATA_SH_NAME = "input data"
-REL_DATA_SH_NAME = "relationships"
-FUNCT_DATA_1_SH_NAME = "function data 1"
-FUNCT_DATA_2_SH_NAME = "function data 2"
-NECESSARY_SH_NAMES = [DIAM_NAME_SH_NAME, INPUT_DATA_SH_NAME]
-FUNCT_DATA_SH_NAMES = [FUNCT_DATA_1_SH_NAME, FUNCT_DATA_2_SH_NAME]
+SH_DF_LIST = ["diam_name_df", "inp_df", "rel_df"]
+SH_NAMES = ["diameter name", "input data", "relationships"]
+FUNCT_DATA_SH_NAMES = ["function data 1", "function data 2"]
 VGP_DATA_SEP = ","
 VAL_FUND_SEP = "-"
 AUX_STR = "AUXILIARY"
@@ -36,26 +31,27 @@ class ConfigData(object):
 	"""
 	This class parse all the input arguments, coming from the user input and from the configuration file
 	"""
-	def __init__(self, fam_dir_path):
-		# try to read the configuration file with the necessary sheets, if it's not present, throws a ValueError
+	def __init__(self, fam_dir_path, mode):
+		if mode == "create":
+			config_file_filename = "configuration file.xlsx"
+		elif mode == "update":
+			config_file_filename = "update file.xlsx"
+		else:
+			raise ValueError("No such a mode for ConfigData")
+		self.path = Path(fam_dir_path).joinpath(config_file_filename)
 		try:
-			self.path = Path(fam_dir_path).joinpath(CONFIG_FILE_FILENAME)
-			self.temp_config_data_df = pd.read_excel(self.path, sheet_name=NECESSARY_SH_NAMES) # add diameter name, input data and relationships workhsheets by default
-			self.diam_name_df = self.temp_config_data_df[DIAM_NAME_SH_NAME].astype(str)
-			self.inp_df = self.temp_config_data_df[INPUT_DATA_SH_NAME].astype(str) # fast access to input data
+			temp_config_data_df = pd.read_excel(self.path, sheet_name=None)
 		except FileNotFoundError:
 			raise ValueError(f"No configuration file in {fam_dir_path}")
-		except KeyError:
-			raise ValueError("A necessary worksheet is not present.")
-		# try to read the relationships data sheets, if it is absent, it simply goes on
-		self.rel_df = None
-		try:
-			temp_rel_df = pd.read_excel(self.path, sheet_name=REL_DATA_SH_NAME).astype(str) # the first two rows are skipped in function values sheets
-			# if the sheet is present but is empty, it simply goes on
-			if not temp_rel_df.empty:
-				self.rel_df = temp_rel_df
-		except KeyError:
-			pass
+
+		# Set DataFrames corresponding to the configuration file sheets (but function sheets)
+		for sheet_df_name, sh_name in zip(SH_DF_LIST, SH_NAMES):
+			try:
+				sheet_df = temp_config_data_df[sh_name].astype(str)
+				setattr(self, sheet_df_name, sheet_df)
+			except KeyError:
+				setattr(self, sheet_df_name, None)
+
 		# try to read two function data sheets, if any of them is absent, it simply goes on
 		self.funct_dfs = []
 		for funct_data_sh_name in FUNCT_DATA_SH_NAMES:
@@ -67,7 +63,6 @@ class ConfigData(object):
 			except KeyError:
 				pass
 		self._diam_name = None
-		self._scale_val_names_list = None
 
 	@property
 	def diam_name(self):
