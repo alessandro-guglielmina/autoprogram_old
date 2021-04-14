@@ -5,7 +5,10 @@ import numpy as np
 import pandas as pd
 import math
 from pathlib import Path
-import copy
+import logging
+
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger("vgp_log")
 
 VGPIO_MODULE_PATH = Path(__file__) # vgpio.py (this module) path
 VGPIO_PACKAGE_PATH = VGPIO_MODULE_PATH.parent # directory containing vgpio.py
@@ -101,11 +104,13 @@ class VgpProgram(object):
 	"""
 	def __init__(self, path, diam_name):
 		# path: .vgp file path
+		LOGGER.info(f"Instancing the VgpProgram object {path}")
 		self.path = path
 		self.diam_name = diam_name
 
 	def __enter__(self):
 		# read DataFrame values from the .vgp file
+		LOGGER.info(f"Accessing the .vgp file at {self.path}")
 		self.con = sql.connect(self.path)
 		self.df_setup()
 		self.initial_diam = self[self.diam_name].val.iloc[0] # diameter name returns 2 values (it's a Parameter)
@@ -113,6 +118,7 @@ class VgpProgram(object):
 
 	def __exit__(self, exc_class, exc, traceback):
 		# write DataFrame values into the .vgp file
+		LOGGER.info(f"Closing the .vgp file at {self.path}")
 		self.df_commit()
 		self.con.commit()
 		self.con.close()
@@ -349,6 +355,9 @@ class VgpProgram(object):
 				is_not_wheel_func = lambda PA_CurveId: self.elem_wise_query(curve_df, curve_df.id_col, PA_CurveId, curve_df.val_col) != WHEEL_CURVE_NAME
 				is_not_wheel_filt = df_temp.PA_CurveId.apply(is_not_wheel_func)
 				# Original values are substituted with scaled values
+				# print(df_temp.loc[is_not_wheel_filt, [table.val_col]].shape[0])
+				# print(scaled_vals(low_prog.df[table.name].loc[is_not_wheel_filt, table.val_col], up_prog.df[table.name].loc[is_not_wheel_filt, table.val_col]).shape[0])
+				# input("pause")
 				df_temp.loc[is_not_wheel_filt, [table.val_col]] = scaled_vals(low_prog.df[table.name].loc[is_not_wheel_filt, table.val_col], up_prog.df[table.name].loc[is_not_wheel_filt, table.val_col])
 			# Otherwise all the data are scaled
 			else:

@@ -14,7 +14,7 @@ from autoprogram import configdataparse as cdp
 from autoprogram.openvgp import vgpio
 
 logging.basicConfig(level=logging.INFO)
-LOGGER = logging.getLogger("my_logger")
+LOGGER = logging.getLogger("gui_log")
 DEFAULT_MODE = "create_manual"
 
 
@@ -73,7 +73,7 @@ class App(tk.Tk):
 			# because everyone needs the following one to be insantiated before itself
 			page_frame = F(self.page_container_frame, self)
 			self.pages[F] = page_frame
-			page_frame.grid(row=0, column=0, sticky="NSEW")
+			page_frame.grid(row=0, column=0)
 
 	def root_setup(self, head_text=None, back_method=None, back_method_args=None, back_state=None, next_method=None, next_method_args=None, next_state=None):
 		"""
@@ -190,13 +190,15 @@ class SelectModePage(Page):
 		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual")
 		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update")
 		inp_mode.set(DEFAULT_MODE) # DEFAULT_MODE (global variable) mode by default
-		create_manual_rb.grid(row=0, column=0, padx=10, pady=4)
-		update_rb.grid(row=1, column=0, padx=10, pady=4)
+		create_manual_rb.grid(row=0, column=0, columnspan=3)
+		update_rb.grid(row=1, column=0, columnspan=3)
 		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[inp_mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
 
+	@hp.try_decorator
 	def next_method(self, inp_mode):
 		# Set the global variable hp.mode
 		hp.mode = inp_mode.get()
+		hp.forget_all_widgets(self)
 		self.root.show_page(InitializationPage)
 
 
@@ -212,6 +214,7 @@ class InitializationPage(Page):
 		Create and grid the InitializationPage widgets and eventually set the root (title, buttonl, labels...)
 		"""
 		if hp.mode == "create_manual":
+			LOGGER.info("Setting the initialization page in create_manual mode")
 			hp.InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
 			self.tool_name_label = tk.Label(self, text="Tool Name: ")
 			self.tool_name_label.grid(row=1, column=0, padx=4, pady=4)
@@ -222,6 +225,7 @@ class InitializationPage(Page):
 			self.root.root_setup(head_text="Initialization Page: Create Manual Mode", back_method=self.back_method,\
 			next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 		elif hp.mode == "update":
+			LOGGER.info(f"Getting the user input data")
 			hp.InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
 			self.browse_butt.config(command=lambda: threading.Thread(target=hp.InitializationPage.set_fam_dir_path(self, common.master_progs_dir)).start())
 			# Constant root setup (independent from the selected mode)
@@ -233,20 +237,20 @@ class InitializationPage(Page):
 	@hp.try_decorator
 	def next_method(self):
 		hp.InitializationPage.set_config_data()
+		hp.forget_all_widgets(self)
 		if hp.mode == "create_manual":
 			# Set the global variable hp.res_prog_name
-			self.tool_name_entry.grid_forget()
-			self.tool_name_label.grid_forget()
 			hp.res_prog_name = self.tool_name_entry.get()
 			self.root.show_page(InputDataPage)
 		elif hp.mode == "update":
 			self.root.show_page(CreateProgramPage)
+		else:
+			raise ValueError(f"No such a mode{hp.mode}")
 
 	def back_method(self):
 		# Set the global variable hp.mode
-		self.tool_name_entry.grid_forget()
-		self.tool_name_label.grid_forget()
 		hp.mode = None
+		hp.forget_all_widgets(self)
 		self.root.show_page(SelectModePage)
 
 
@@ -268,19 +272,19 @@ class InputDataPage(Page):
 	@hp.try_decorator
 	def next_method(self):
 		if hp.mode == "create_manual":
+			hp.forget_all_widgets(self)
 			# Set the global variable hp.raw_inp_data
 			hp.raw_inp_data = hp.InputDataPage.get_gui_raw_data(self,hp.config_data.inp_df.data_name)
 			# Save raw input data inside hp.config_data.inp_df
 			hp.config_data.save_raw_inp_data(hp.raw_inp_data)
 			self.root.show_page(CreateProgramPage)
-			hp.InputDataPage.forget_gui_data_entries(self)
 		else:
-			raise ValueError("Something went wrong")
+			raise ValueError("This page cannot be called in any mode but create_manual")
 
 	def back_method(self):
 		# Set the global variable hp.fam_dir_path
 		hp.fam_dir_path = None
-		hp.InputDataPage.forget_gui_data_entries(self)
+		hp.forget_all_widgets(self)
 		self.root.show_page(InitializationPage)
 
 
@@ -299,8 +303,6 @@ class CreateProgramPage(Page):
 		next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
 		self.progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode="determinate")
 		self.progress_bar.grid(row=0, column=1, padx=4, pady=40)
-		self.not_updated_names_label = tk.Label(self, width=60)
-		self.not_updated_names_label.grid(row=1, column=0, columnspan=4)
 
 	def run(self):
 		"""
@@ -341,21 +343,26 @@ class CreateProgramPage(Page):
 					hp.config_data.update_function_data(update_prog)
 		self.progress_bar['value']=100
 
-
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, next_state=tk.NORMAL, back_state=tk.NORMAL)
-		self.not_updated_names_label.config(text="Not updated names:  " + " ".join([str(name) for name in vgpio.not_updated_names]))
-		self.root.comm_label_write("Program created!")
+		self.root.comm_label_write("Program created successfully!")
+		LOGGER.info("Program created succesfully!")
+		if vgpio.not_updated_names:
+			LOGGER.warning("Not updated data names:")
+			[LOGGER.warning(name) for name in vgpio.not_updated_names]
+
 
 	@hp.try_decorator
 	def next_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]
+		hp.forget_all_widgets(self)
 		self.root.show_page(SelectModePage)
 
 	def back_method(self):
 		# Set the global variable vgpio.not_updated_names
 		vgpio.not_updated_names =[]
+		hp.forget_all_widgets(self)
 		if hp.mode == "create_manual":
 			# Set the global variable hp.raw_inp_data
 			hp.raw_inp_data = None

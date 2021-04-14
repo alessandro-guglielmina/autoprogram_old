@@ -5,11 +5,14 @@ import threading
 import os
 from pathlib import Path
 from tkinter import filedialog
+import logging
 
 from autoprogram import configdataparse as cdp
 from autoprogram.openvgp import vgpio
 from autoprogram import common
 
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger("hp_log")
 fam_dir_path = None
 
 def try_decorator(target_method):
@@ -23,6 +26,21 @@ def try_decorator(target_method):
 		except ValueError as ve:
 			args[0].root.comm_label_write(ve) # args[0] is self, i.e. the frame object (the page)
 	return wrapper_function
+
+def forget_all_widgets(page):
+	"""
+	This method forget all the widgets inside a page
+	"""
+	def all_children (window) :
+		_list = window.winfo_children()
+		for item in _list :
+			if item.winfo_children() :
+				_list.extend(item.winfo_children())
+			return _list
+
+	widget_list = all_children(page)
+	for item in widget_list:
+		item.grid_forget()
 
 
 class InitializationPage(object):
@@ -47,10 +65,12 @@ class InitializationPage(object):
 		Set the global variable fam_dir_path. Browse button to look for the family directory. If the directory doesn't exists, throws a ValueError
 		"""
 		if not os.path.isdir(initialdir):
-			raise ValueError("Specified master program directory doesn't exist")
+			raise ValueError(f"No such a master program directory: {initialdir}")
+			LOGGER.error(f"No such a master program directory: {initialdir}")
 		# Set the global variable fam_dir_path
 		global fam_dir_path
 		fam_dir_path = Path(filedialog.askdirectory(initialdir=initialdir))
+		LOGGER.info(f"Family directory set to {str(fam_dir_path)}")
 		initialization_page_frame.browse_entry.insert(0, fam_dir_path.as_posix())
 
 	@staticmethod
@@ -66,7 +86,8 @@ class InitializationPage(object):
 			elif  mode == "update":
 				config_data = cdp.ConfigData(fam_dir_path, "update")
 		except TypeError:
-			raise ValueError("Select a folder")
+			LOGGER.error("Family directory not selected")
+			raise ValueError("Family directory not selected")
 
 
 class InputDataPage(object):
@@ -79,6 +100,7 @@ class InputDataPage(object):
 		This method replace the "." with "_", because the dot results in a bad widget name error
 		"""
 		widget_name = data_name.replace(".", "_").lower()
+		LOGGER.info(f"Widget name changed from {data_name} to {widget_name}")
 		return widget_name
 
 	@staticmethod
@@ -86,6 +108,7 @@ class InputDataPage(object):
 		"""
 		Takes input data description from the configuration file and grid in the page
 		"""
+		LOGGER.info("Gridding gui data entries...")
 		for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.inp_df.data_name, config_data.inp_df.data_descr)):
 			inp_data_entry = tk.Entry(input_data_page, width=20, name=InputDataPage.to_widget_name(inp_data_name))
 			inp_data_label = tk.Label(input_data_page, width=20, text=inp_data_descr, name=InputDataPage.to_widget_name(inp_data_name + "_descr")) # inp_data_name + "_descr" is a unique id for the decription labels
@@ -98,16 +121,22 @@ class InputDataPage(object):
 		This method collect the raw string inputs inserted by the user (it's one way to get input data)
 		"""
 		raw_inp_data_list = []
+
 		for inp_data_name in input_data_names:
 			data_entry = input_data_page.nametowidget(InputDataPage.to_widget_name(inp_data_name))
 			string_inp_data_i = data_entry.get()
+			LOGGER.info(f"String user input {inp_data_name} has value {string_inp_data_i}")
 			# if the user input can be casted as float, it's converted as float
 			try:
 				raw_inp_data_i = [float(string_inp_data_i)]
+				LOGGER.info(f"String user input {inp_data_name} has been converted to float")
 			# otherwise is kept as a string variable
 			except ValueError:
 				raw_inp_data_i = ['"' + string_inp_data_i + '"']
+				LOGGER.info(f"String user input {inp_data_name} has been kept as string")
+
 			raw_inp_data_list.append(raw_inp_data_i)
+
 		raw_inp_data = pd.Series(raw_inp_data_list)
 		return raw_inp_data
 
@@ -116,6 +145,7 @@ class InputDataPage(object):
 		"""
 		Forget the previously gridded widgets
 		"""
+		LOGGER.info("Forgetting gui data entries...")
 		for i, (inp_data_name, inp_data_descr) in enumerate(zip(config_data.inp_df.data_name, config_data.inp_df.data_descr)):
 			input_data_page.nametowidget(InputDataPage.to_widget_name(inp_data_name)).grid_forget()
 			input_data_page.nametowidget(InputDataPage.to_widget_name(inp_data_name + "_descr")).grid_forget() # inp_data_name + "_descr" is a unique id for the decription labels
@@ -134,15 +164,13 @@ class CreateProgramPage(object):
 		# Set the global variable diam_val
 		global diam_val
 		diam_val = float(config_data.inp_df.loc[filt, "raw_data"][0][0])
+		LOGGER.info(f"Input diameter value has been set to {diam_val}")
 
-	@staticmethod
-	def get_update_prog_list():
-		return fam_dir_path.rglob('*' + common.vgp_suffix)
 
 	@staticmethod
 	def set_low_up_res_prog_paths():
 		"""
-		This method sets the lower, upper and result program paths as global variables
+		This method sets the lower, upper and result program paths as global variables, by a search algorithm
 		"""
 		def get_diam_val(prog_path):
 			"""
@@ -161,27 +189,38 @@ class CreateProgramPage(object):
 		try:
 			low_prog_path = low_progs_df.loc[(low_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
 		except ValueError:
-			raise ValueError("The selected diameter is lower than the master programs.")
+			LOGGER.error(f"The selected diameter ({diam_val}) is lower than the master programs.")
+			raise ValueError(f"The selected diameter ({diam_val}) is lower than the master programs.")
 		# Upper program
 		up_filt = fam_progs_df["diam_val"] >= diam_val
 		up_progs_df = fam_progs_df.loc[up_filt, :].reset_index(drop=True)
 		try:
 			up_prog_path = up_progs_df.loc[(up_progs_df["diam_val"] - diam_val).abs().argmin(), "path"]
 		except ValueError:
-			raise ValueError("The selected diameter is higher than the master programs.")
+			LOGGER.error(f"The selected diameter ({diam_val}) is greater than the master programs.")
+			raise ValueError(f"The selected diameter ({diam_val}) is greater than the master programs.")
 		# Master program
 		master_prog_path = Path(fam_progs_df.loc[(fam_progs_df["diam_val"] - diam_val).abs().argmin(), "path"])
+		LOGGER.info(f"The selected master program path is {str(master_prog_path)}")
 		master_parent_dir = master_prog_path.parents[0]
 		machine = master_prog_path.stem.split("_")[1]
 		comp_res_prog_name = res_prog_name + "_" + machine
+		LOGGER.info(f"The complete program name is {comp_res_prog_name}")
 		# Copy the master program to the result directory and get the result program parent directory
 		res_prog_parent_dir = shutil.copytree(master_prog_path.parents[0], common.res_progs_dir.joinpath(comp_res_prog_name), dirs_exist_ok=True)
+		LOGGER.info(f"The result program directory is {str(res_prog_parent_dir)}")
 		# Rename the result program
 		res_prog_path_temp = next(res_prog_parent_dir.glob('*' + common.vgp_suffix))
-		res_prog_path = res_prog_path_temp.rename(Path(res_prog_parent_dir, comp_res_prog_name + common.vgp_suffix))
+		try:
+			res_prog_path = res_prog_path_temp.rename(Path(res_prog_parent_dir, comp_res_prog_name + common.vgp_suffix))
+			LOGGER.info(f"The result program filename is {str(res_prog_path)}")
+		except FileExistsError:
+			LOGGER.error(f"The destination directory {res_prog_parent_dir} already exists")
+			raise ValueError(f"The destination directory {res_prog_parent_dir} already exists")
 		# Rename wheel datasheet
-		ds_path = next(res_prog_parent_dir.glob("*.docm"))
-		ds_path.rename(Path(res_prog_parent_dir, "DS_" + comp_res_prog_name + ".docm"))
+		ds_path_gen = res_prog_parent_dir.glob("*.docm")
+		for ds_path in ds_path_gen: # for cycle raise StopIteration when the generator is empty, thus managing when we don't have any datasheet
+			ds_path.rename(Path(res_prog_parent_dir, "DS_" + comp_res_prog_name + ".docm"))
 		# Create VGP program objects
 		global low_prog, up_prog
 		if low_prog_path != up_prog_path:

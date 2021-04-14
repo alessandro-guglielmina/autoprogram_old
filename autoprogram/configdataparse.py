@@ -4,6 +4,7 @@ from pathlib import Path
 import tkinter as tk
 import re
 from math import * # needed to read trigonometric functions in the configuration file
+import logging
 
 from autoprogram import common
 from autoprogram.openvgp.vgpio import VgpData
@@ -14,6 +15,8 @@ FUNCT_DATA_SH_NAMES = ["function data 1", "function data 2"]
 VGP_DATA_SEP = ","
 VAL_FUND_SEP = "-"
 AUX_STR = "AUXILIARY"
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger("cdp_log")
 
 def try_decorator(next_method):
 	"""
@@ -33,34 +36,42 @@ class ConfigData(object):
 	"""
 	def __init__(self, fam_dir_path, mode):
 		if mode == "create":
+			LOGGER.info("Setting the configuration file name for the create mode: configuration file.xlsx")
 			config_file_filename = "configuration file.xlsx"
 		elif mode == "update":
+			LOGGER.info("Setting the configuration file name for the create mode: update file.xlsx")
 			config_file_filename = "update file.xlsx"
 		else:
 			raise ValueError("No such a mode for ConfigData")
 		self.path = Path(fam_dir_path).joinpath(config_file_filename)
 		try:
+			LOGGER.info(f"Reading the excel file at: {self.path}...")
 			temp_config_data_df = pd.read_excel(self.path, sheet_name=None)
 		except FileNotFoundError:
+			LOGGER.error(f"No configuration file in {fam_dir_path}")
 			raise ValueError(f"No configuration file in {fam_dir_path}")
 
 		# Set DataFrames corresponding to the configuration file sheets (but function sheets)
 		for sheet_df_name, sh_name in zip(SH_DF_LIST, SH_NAMES):
 			try:
+				LOGGER.info(f"Reading the {sh_name} sheet...")
 				sheet_df = temp_config_data_df[sh_name].astype(str)
 				setattr(self, sheet_df_name, sheet_df)
 			except KeyError:
+				LOGGER.info(f"{sh_name} sheet skipped")
 				setattr(self, sheet_df_name, None)
 
 		# try to read two function data sheets, if any of them is absent, it simply goes on
 		self.funct_dfs = []
 		for funct_data_sh_name in FUNCT_DATA_SH_NAMES:
 			try:
+				LOGGER.info(f"Reading the {funct_data_sh_name} function sheet")
 				funct_df_i = pd.read_excel(self.path, sheet_name=funct_data_sh_name, skiprows=[0, 1]) # the first two rows are skipped in function values sheets
 				# if the sheet is present but is empty, it simply goes on
 				if not funct_df_i.empty:
 					self.funct_dfs.append(funct_df_i) # fast access to function data
 			except KeyError:
+				LOGGER.info(f"{funct_data_sh_name} function sheet skipped")
 				pass
 		self._diam_name = None
 
@@ -70,12 +81,14 @@ class ConfigData(object):
 		Diameter name
 		"""
 		self._diam_name = self.diam_name_df.at[0, "diam_name"]
+		LOGGER.info(f"The diameter name is {self._diam_name}")
 		return self._diam_name
 
 	def save_raw_inp_data(self, raw_inp_data):
 		"""
 		This method writes the passed raw_data in the self.inp_df DataFrame
 		"""
+		LOGGER.info("Saving raw input data...")
 		raw_inp_data = pd.Series(raw_inp_data)
 		raw_inp_data.apply(lambda x: x.append(np.nan))
 		self.inp_df["raw_data"] = raw_inp_data # input data can be only scalar values (only the val field is required)
@@ -86,11 +99,13 @@ class ConfigData(object):
 		"""
 		filt = self.inp_df["data_name"] == self.diam_name
 		self.diam_val = float(self.inp_df.loc[filt, "val"].values[0])
+		LOGGER.info(f"The diameter value is {self.diam_val}")
 
 	def update_input_data(self, res_prog):
 		"""
 		This method updates the data coming from self.inp_df and self.rel_df
 		"""
+		LOGGER.info(f"Updating the input data into the program {res_prog.path}")
 		inp_data_names = self.inp_df.data_name
 		inp_data_names_filt = ~inp_data_names.str.upper().str.contains(AUX_STR, regex=False) # get the boolean filter corresponding to the names that are not auxiliary (auxiliary names are not updated in the program)
 		inp_data_names = inp_data_names[inp_data_names_filt] # get only the not auxiliary names
@@ -101,6 +116,7 @@ class ConfigData(object):
 		"""
 		This method perform a variable assignment from python code
 		"""
+		LOGGER.info(f"Compiling the python expression: {python_expr}")
 		try:
 			local_dict = {}
 			exec(python_expr, globals(), local_dict)
@@ -122,24 +138,27 @@ class ConfigData(object):
 			try:
 				data = res_prog[name] # get data
 				scalar_val = data.val[0] # take only the first value
+				LOGGER.info(f"The argument {name} has been taken from the program and has value {scalar_val}")
 				return scalar_val
 			except ValueError:
-					pass
+				pass
 			#Try to search for the auxiliary value inside self.inp_df
 			try:
 				filt = self.inp_df.data_name == name
 				scalar_val = self.inp_df.loc[filt, "raw_data"].iloc[0][0] # data are stored as lists (the last [0] get the scalat value)
+				LOGGER.info(f"The argument {name} has been taken from the user inputs and has value {scalar_val}")
 				return scalar_val
 			except IndexError:
 				pass
 			except KeyError:
-				raise ValueError("Tried to access data from user input")
+				raise ValueError("Tried to access to auxiliary data from user input")
 			#Try to search for the auxiliary value inside self.rel_df
 			try:
 				filt = self.rel_df.data_name == name
 				scalar_val = self.rel_df.loc[filt, "raw_data"].iloc[0][0] # data are stored as lists (the last [0] get the scalat value)
 				return scalar_val
 			except IndexError:
+				LOGGER.error(f"No such a name among available data: {name}")
 				raise ValueError(f"No such a name among available data: {name}")
 
 		if self.rel_df is not None: # if relationships are present in the workbook
@@ -147,6 +166,7 @@ class ConfigData(object):
 			# Iterate over each relationship (over each row)
 			for idx, rel_df_row in self.rel_df.iterrows():
 				data_name = rel_df_row.data_name
+				LOGGER.info(f"The argument {data_name} is being updated with a relationship...")
 				rel = rel_df_row.rel
 				arg_names_list = re.findall(r'\$(.*?)\$', rel) # get a list with all the data names in the relationship
 				for arg_name in arg_names_list:
@@ -159,7 +179,10 @@ class ConfigData(object):
 					filt = self.rel_df["data_name"] == data_name
 					self.rel_df.loc[filt, "raw_data"] = raw_rel_data
 				else:
-					res_prog[data_name] = raw_rel_data
+					try:
+						res_prog[data_name] = raw_rel_data
+					except IndexError:
+						raise valueError(f"The relationship for {data_name} has the wrong dimensions")
 
 
 	def update_function_data(self, res_prog):
@@ -181,6 +204,7 @@ class ConfigData(object):
 				# iterations over columns (rows already match the argument value)
 				for data_name in select_funct_data_df: # data_name = column heading
 					if not ('UNNAMED' in data_name.upper()): # if the column name is empty, it's a comment and must not be compiled
+						LOGGER.info(f"The argument {data_name} is being updated with a function...")
 						funct_raw_expr = select_funct_data_df.at[0, data_name]
 						funct_data_expr = "funct_data = [[" + funct_raw_expr + "]]" # the function value is assigned to the variable "raw_funct_data" when this code is compiled
 						# execute raw_funct_data assignment
@@ -193,3 +217,4 @@ class ConfigData(object):
 							funct_data[0][0] = pd.Series(funct_data[0][0])/60
 						# update vgp data in the program (raw data are automatically converted to vgp data)
 						res_prog[data_name] = funct_data
+						LOGGER.info(f"The argument {data_name} has been updated with the value {funct_data}")
