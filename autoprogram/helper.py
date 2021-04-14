@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from tkinter import filedialog
 import logging
+import socket
 
 from autoprogram import configdataparse as cdp
 from autoprogram.openvgp import vgpio
@@ -14,6 +15,15 @@ from autoprogram import common
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("hp_log")
 fam_dir_path = None
+
+
+def user_allowed():
+	"""
+	This method verifies that the user is allowed to use the program
+	"""
+	user_access_df = pd.read_excel(common.user_access_wb_path)
+	hostname = socket.gethostname()
+	return (hostname in user_access_df.iloc[:, 0].to_list())
 
 def try_decorator(target_method):
 	"""

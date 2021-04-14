@@ -46,7 +46,7 @@ class ConfigData(object):
 		self.path = Path(fam_dir_path).joinpath(config_file_filename)
 		try:
 			LOGGER.info(f"Reading the excel file at: {self.path}...")
-			temp_config_data_df = pd.read_excel(self.path, sheet_name=None)
+			config_data_dict = pd.read_excel(self.path, sheet_name=None)
 		except FileNotFoundError:
 			LOGGER.error(f"No configuration file in {fam_dir_path}")
 			raise ValueError(f"No configuration file in {fam_dir_path}")
@@ -55,7 +55,7 @@ class ConfigData(object):
 		for sheet_df_name, sh_name in zip(SH_DF_LIST, SH_NAMES):
 			try:
 				LOGGER.info(f"Reading the {sh_name} sheet...")
-				sheet_df = temp_config_data_df[sh_name].astype(str)
+				sheet_df = config_data_dict[sh_name].astype(str)
 				setattr(self, sheet_df_name, sheet_df)
 			except KeyError:
 				LOGGER.info(f"{sh_name} sheet skipped")

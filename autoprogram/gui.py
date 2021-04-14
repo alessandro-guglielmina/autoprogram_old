@@ -372,5 +372,11 @@ class CreateProgramPage(Page):
 
 
 def main():
-	app = App() # instantiate root
-	app.mainloop()
+	try:
+		if hp.user_allowed():
+			app = App() # instantiate root
+			app.mainloop()
+		else:
+			raise SystemExit
+	except Exception:
+		raise Exception("Unhandled exception")
