@@ -73,7 +73,7 @@ class App(tk.Tk):
 			# because everyone needs the following one to be insantiated before itself
 			page_frame = F(self.page_container_frame, self)
 			self.pages[F] = page_frame
-			page_frame.grid(row=0, column=0)
+			page_frame.grid(row=0, column=0, sticky="nwse")
 
 	def root_setup(self, head_text=None, back_method=None, back_method_args=None, back_state=None, next_method=None, next_method_args=None, next_state=None):
 		"""
@@ -187,11 +187,11 @@ class SelectModePage(Page):
 		Create and grid the SelectModePage widgets and eventually set the root (title, buttonl, labels...)
 		"""
 		inp_mode = tk.StringVar()
-		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual")
-		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update")
 		inp_mode.set(DEFAULT_MODE) # DEFAULT_MODE (global variable) mode by default
-		create_manual_rb.grid(row=0, column=0, columnspan=3)
-		update_rb.grid(row=1, column=0, columnspan=3)
+		create_manual_rb = tk.Radiobutton(self, text="Create Manual", variable=inp_mode, value="create_manual", width=60)
+		update_rb = tk.Radiobutton(self, text="Update", variable=inp_mode, value="update", width=60)
+		create_manual_rb.grid(row=0, column=1, pady=10, sticky="we")
+		update_rb.grid(row=1, column=1, pady=10, sticky="we")
 		self.root.root_setup(head_text="Select Mode", next_method=self.next_method, next_method_args=[inp_mode], back_state=tk.DISABLED, next_state=tk.NORMAL)
 
 	@hp.try_decorator
@@ -225,7 +225,7 @@ class InitializationPage(Page):
 			self.root.root_setup(head_text="Initialization Page: Create Manual Mode", back_method=self.back_method,\
 			next_method=self.next_method, back_state=tk.NORMAL, next_state=tk.NORMAL)
 		elif hp.mode == "update":
-			LOGGER.info(f"Getting the user input data")
+			LOGGER.info("Setting the initialization page in update mode")
 			hp.InitializationPage.constant_page_setup(self) # this must be inside the if loop, otherwise the setup is performed anyway, even if an exception is raised
 			self.browse_butt.config(command=lambda: threading.Thread(target=hp.InitializationPage.set_fam_dir_path(self, common.master_progs_dir)).start())
 			# Constant root setup (independent from the selected mode)
@@ -302,7 +302,7 @@ class CreateProgramPage(Page):
 		self.root.root_setup(head_text="Create Program Page", back_method=self.back_method,\
 		next_method=self.next_method, back_state=tk.DISABLED, next_state=tk.DISABLED)
 		self.progress_bar = ttk.Progressbar(self, orient=tk.HORIZONTAL, length=200, mode="determinate")
-		self.progress_bar.grid(row=0, column=1, padx=4, pady=40)
+		self.progress_bar.grid(row=0, column=1, padx=60, pady=40, sticky="we")
 
 	def run(self):
 		"""
@@ -378,5 +378,5 @@ def main():
 			app.mainloop()
 		else:
 			raise SystemExit
-	except Exception:
-		raise Exception("Unhandled exception")
+	except Exception as e:
+		raise Exception(e)

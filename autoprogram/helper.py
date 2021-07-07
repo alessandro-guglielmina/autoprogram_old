@@ -189,7 +189,7 @@ class CreateProgramPage(object):
 			with vgpio.VgpProgram(prog_path, config_data.diam_name) as prog:
 				return prog.initial_diam
 
-		prog_paths =pd.Series(fam_dir_path.rglob('*' + common.vgp_suffix))
+		prog_paths = pd.Series(fam_dir_path.rglob('*' + common.vgp_suffix))
 		prog_diam_vals = pd.Series(prog_paths.apply(get_diam_val))
 		fam_progs_df = pd.DataFrame({"path": prog_paths, "diam_val": prog_diam_vals})
 		# Enclosing and master programs selection
@@ -239,6 +239,10 @@ class CreateProgramPage(object):
 			low_prog, up_prog = None, None
 		global res_prog
 		res_prog = vgpio.VgpProgram(res_prog_path, config_data.diam_name)
+
+	@staticmethod
+	def get_update_prog_list():
+		return pd.Series(fam_dir_path.rglob('*' + common.vgp_suffix)).to_list()
 
 	@staticmethod
 	def scale_tool():

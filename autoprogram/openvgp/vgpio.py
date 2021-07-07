@@ -307,7 +307,7 @@ class VgpProgram(object):
 			except KeyError:
 				# Set the global variable not_updated_names
 				global not_updated_names
-				not_updated_names.append(name)
+				not_updated_names.append(name + " in " + str(self.path))
 
 		# Arguments homogeneization
 		names = pd.Series(names)
