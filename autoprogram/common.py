@@ -5,8 +5,8 @@ import pandas as pd
 
 from autoprogram import settingsparser as sp
 
-user_access_wb_path = "V:/Common/MTI_Production-Engineering-Team/AUTOPROGRAM/USER ACCESS/user access.xlsx"
-root_header = "AutoProgram 1.0. Copyright (c) 2021 Alessandro Guglielmina. All rights reserved."
+user_access_wb_path = "V:/MTO/Departments/Manufacturing/WORK N6/AUTOPROGRAM NANO/USER ACCESS/user access.xlsx"
+root_header = "AutoProgram NANO. Copyright (c) 2021 Alessandro Guglielmina. All rights reserved."
 vgp_suffix = ".vgp"
 separator = "-"
 # settings file name
